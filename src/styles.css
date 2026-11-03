@@ -203,7 +203,7 @@ html, body {
   position: fixed;
   left: clamp(16px, 7vw, 120px);
   bottom: calc(clamp(20px, 5vh, 56px) + env(safe-area-inset-bottom, 0px));
-  width: min(560px, calc(100vw - 32px));
+  width: min(760px, calc(100vw - 32px));
   pointer-events: none;
   opacity: 0;
   transform: translateY(16px);
@@ -224,7 +224,7 @@ html, body {
 }
 .panel__body {
   margin-top: 0.5rem;
-  max-width: 52ch;
+  max-width: 72ch;
   font-size: clamp(0.92rem, 1.25vw, 1.05rem);
   line-height: 1.55;
   color: var(--muted);
@@ -247,6 +247,14 @@ html, body {
   transition: opacity 1.2s ease;
 }
 .stage-label.is-visible { opacity: 1; }
+.stage-label--small {
+  font-family: "Inter", system-ui, sans-serif;
+  font-weight: 400;
+  font-size: clamp(0.66rem, 0.95vw, 0.8rem);
+  letter-spacing: 0.06em;
+  text-transform: none;
+  color: var(--sand-dim);
+}
 
 /* ---------- Mute toggle ---------- */
 .mute {
@@ -292,5 +300,13 @@ html, body {
     bottom: calc(80px + env(safe-area-inset-bottom, 0px));
   }
   .panel__body { margin-inline: auto; }
+  /* soft dark fade behind the caption so it stays readable over the sand */
+  .panel::before {
+    content: "";
+    position: absolute;
+    inset: -40px -16px -120px;
+    background: linear-gradient(to top, var(--bg) 55%, rgba(3, 3, 4, 0));
+    z-index: -1;
+  }
   .stage-label { letter-spacing: 0.14em; }
 }

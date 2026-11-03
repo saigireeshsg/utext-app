@@ -3,7 +3,8 @@ import { Reflector } from "three/addons/objects/Reflector.js";
 import { createGlassOfWater } from "./glass.js";
 import { SoundEngine } from "./audio.js";
 import { createPourStream } from "./pourStream.js";
-import { createSand, createSandPath } from "./sand.js";
+import { createSand } from "./sand.js";
+import { buildSandStory } from "./sandStory.js";
 import { story } from "./story.js";
 import "./styles.css";
 
@@ -232,11 +233,11 @@ scene.add(pour.group);
 /* ------------------------------------------------------------------ */
 /* Sand art                                                            */
 /* ------------------------------------------------------------------ */
-const sand = createSand({ size: 7.4, center: [-0.5, -0.5], resolution: isTouch ? 1024 : 1536 });
+const sand = createSand({ size: 7.8, center: [-0.2, -0.35], resolution: isTouch ? 1024 : 1536 });
 scene.add(sand.group);
-const sandPath = createSandPath({ lineStart: [-3.75], circleCenter: [0.5, -0.5], radius: 2.05 });
+const sandStory = buildSandStory(story);
 // Region the overhead camera must frame: the drawing, its labels, and the glass set aside.
-const SAND_BOUNDS = { x: [-4.15, 3.6], z: [-3.35, 2.25] };
+const SAND_BOUNDS = sandStory.bounds;
 const SAND_SPOT = { x: 0.15, z: -0.5, angle: 0.5 };
 
 /* ------------------------------------------------------------------ */
@@ -318,13 +319,13 @@ function showPanel({ kicker, title, body }) {
   } else fill();
 }
 
-// One label per stage, placed just outside the circle.
-const stageLabels = story.stages.map((st) => {
+// Labels on the drawing (phase names, the scattered bits, the trip, the Polo).
+const sandLabels = sandStory.labels.map((l) => {
   const el = document.createElement("div");
-  el.className = "stage-label";
-  el.textContent = st.label;
+  el.className = `stage-label stage-label--${l.kind}`;
+  el.textContent = l.text;
   labelsEl.append(el);
-  return { el, anchor: sandPath.pointAtAngle(st.angle, 0.62) };
+  return { el, anchor: new THREE.Vector3(l.at[0], 0, l.at[1]) };
 });
 
 // idle → lights → sliding → full → drinking → empty → toSand → sand → done
@@ -412,24 +413,30 @@ function maxFillAt(theta) {
   return THREE.MathUtils.clamp((level - lo) / (glass.WATER_LEVEL - lo), 0, 1);
 }
 
-/** Overhead framing that fits the sand drawing, leaving room for the caption. */
-function overheadView(out) {
+/**
+ * Overhead framing for the sand art, leaving room for the caption.
+ * Wide screens fit the whole drawing. Phones keep the graph upright (so "down"
+ * still means down) and instead zoom in and pan along with the pour, then zoom
+ * out for the finale.
+ */
+let followX = SAND_BOUNDS.x[0];
+function overheadView(out, dt) {
   const portrait = camera.aspect < 1.1;
   const [x0, x1] = SAND_BOUNDS.x;
   const [z0, z1] = SAND_BOUNDS.z;
-  const cx = (x0 + x1) / 2;
+  const following = portrait && phase !== "done" && sandRun.finaleAt < 0;
+  const halfW = following ? 2.5 : (x1 - x0) / 2;
+  const halfH = (z1 - z0) / 2;
+  followX += (sandRun.x - followX) * Math.min(dt * 0.9, 1);
+  const cx = following ? THREE.MathUtils.clamp(followX, x0 + halfW, x1 - halfW) : (x0 + x1) / 2;
   const cz = (z0 + z1) / 2;
-  // On portrait screens the camera is turned 90° so the long line runs up the screen.
-  const halfW = portrait ? (z1 - z0) / 2 : (x1 - x0) / 2;
-  const halfH = portrait ? (x1 - x0) / 2 : (z1 - z0) / 2;
   const tanV = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
-  const reserved = portrait ? 0.3 : 0.22; // bottom of the screen kept for the caption
+  const reserved = portrait ? 0.36 : 0.3; // bottom of the screen kept for the caption
   const h = Math.max(halfH / (tanV * (1 - reserved)), halfW / (tanV * camera.aspect)) * 1.04;
-  const down = portrait ? tmp.set(-1, 0, 0) : tmp.set(0, 0, 1); // screen-down, in world
-  const shift = (reserved / 2) * 2 * h * tanV;
-  out.look.set(cx + down.x * shift, 0, cz + down.z * shift);
-  out.pos.set(out.look.x + down.x * h * 0.16, h, out.look.z + down.z * h * 0.16);
-  out.up.set(portrait ? 1 : 0, 0, portrait ? 0 : -1);
+  const shift = reserved * h * tanV; // look a little lower so the drawing sits above the caption
+  out.look.set(cx, 0, cz + shift);
+  out.pos.set(out.look.x, h, out.look.z + h * 0.16);
+  out.up.set(0, 0, -1);
   return out;
 }
 const overhead = { pos: new THREE.Vector3(), look: new THREE.Vector3(), up: new THREE.Vector3() };
@@ -438,55 +445,82 @@ const overhead = { pos: new THREE.Vector3(), look: new THREE.Vector3(), up: new 
 /* Sand script                                                         */
 /* ------------------------------------------------------------------ */
 const SAND_RATE = isTouch ? 300 : 380; // falling grain-clusters per second
-const SPEED_LINE = reduceMotion ? 2.4 : 0.95;
-const SPEED_CIRCLE = reduceMotion ? 2.8 : 1.2;
-function buildSandScript() {
-  const steps = [{ panel: story.line }, { pourTo: sandPath.lineLength, speed: SPEED_LINE }];
-  steps.push({ panel: story.bend }, { dwell: 1.8 });
-  story.stages.forEach((st, i) => {
-    steps.push({ pourTo: sandPath.distanceAtAngle(st.angle), speed: SPEED_CIRCLE });
-    steps.push({ stage: i }, { dwell: 2.2 });
-  });
-  steps.push({ pourTo: sandPath.total, speed: SPEED_CIRCLE }, { close: true });
-  return steps;
-}
-const sandRun = { steps: [], i: 0, dist: 0, wait: 0, pouring: false };
+const SAND_SPEED = reduceMotion ? 2.5 : 1;
+const sandRun = {
+  steps: [], i: 0, stroke: null, d: 0, wait: 0,
+  captionAt: 0, readFor: 0, x: -3.6, z: 1.6, flow: 0, weight: 1, finaleAt: -1,
+};
 
-function runSand(dt) {
+function prepareStroke(pts) {
+  const cum = [0];
+  for (let k = 1; k < pts.length; k++) {
+    cum.push(cum[k - 1] + Math.hypot(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1]));
+  }
+  return { pts, cum, total: cum[cum.length - 1] };
+}
+function strokeAt(st, d) {
+  const { pts, cum } = st;
+  let k = 1;
+  while (k < cum.length - 1 && cum[k] < d) k++;
+  const u = THREE.MathUtils.clamp((d - cum[k - 1]) / (cum[k] - cum[k - 1] || 1), 0, 1);
+  return [pts[k - 1][0] + (pts[k][0] - pts[k - 1][0]) * u, pts[k - 1][1] + (pts[k][1] - pts[k - 1][1]) * u];
+}
+
+/** Advance the sand script; sets sandRun.flow/x/z/weight for this frame. */
+function runSand(dt, time) {
   const r = sandRun;
+  r.flow = 0;
   while (r.i < r.steps.length) {
     const st = r.steps[r.i];
-    if (st.panel) {
-      showPanel(st.panel);
+    if (st.caption) {
+      showPanel(st.caption);
+      r.captionAt = time;
+      // give people time to read it: ~200 words per minute, at least 3.5 s
+      const words = `${st.caption.title} ${st.caption.body}`.split(/\s+/).length;
+      r.readFor = reduceMotion ? 2.5 : Math.max(3.5, words / 3.3);
       r.i++;
-    } else if (st.stage !== undefined) {
-      const s = story.stages[st.stage];
-      stageLabels[st.stage].el.classList.add("is-visible");
-      showPanel({
-        kicker: `// ${String(st.stage + 1).padStart(2, "0")} of ${String(story.stages.length).padStart(2, "0")}`,
-        title: s.label,
-        body: s.body,
-      });
+    } else if (st.label !== undefined) {
+      sandLabels[st.label].el.classList.add("is-visible");
       r.i++;
-    } else if (st.close) {
-      showPanel(story.close);
-      phase = "done";
-      r.pouring = false;
+    } else if (st.read) {
+      if (time - r.captionAt < r.readFor) return;
       r.i++;
-    } else if (st.dwell !== undefined) {
+    } else if (st.wait !== undefined) {
       r.wait += dt;
-      r.pouring = true;
-      if (r.wait < st.dwell) return 0.45; // keep a trickle going: it builds a small mound
+      if (r.wait < st.wait) return;
       r.wait = 0;
       r.i++;
-    } else if (st.pourTo !== undefined) {
-      r.pouring = true;
-      r.dist = Math.min(r.dist + st.speed * dt, st.pourTo);
-      if (r.dist < st.pourTo) return 1;
+    } else if (st.mound) {
+      [r.x, r.z] = st.mound;
+      r.flow = 0.7;
+      r.weight = 2.4;
+      r.wait += dt;
+      if (r.wait < st.time) return;
+      r.wait = 0;
       r.i++;
+    } else if (st.stroke) {
+      if (!r.stroke) {
+        r.stroke = prepareStroke(st.stroke);
+        r.d = 0;
+      }
+      r.d = Math.min(r.d + st.speed * SAND_SPEED * dt, r.stroke.total);
+      [r.x, r.z] = strokeAt(r.stroke, r.d);
+      r.weight = st.weight;
+      r.flow = 1;
+      if (r.d < r.stroke.total) return;
+      r.stroke = null;
+      r.i++;
+    } else if (st.finale) {
+      // Every piece lifts off the table and comes together.
+      sandLabels.forEach((l) => l.el.classList.remove("is-visible"));
+      panel.classList.remove("is-visible");
+      sand.startReform(st.finale);
+      sound.whoosh();
+      r.finaleAt = time;
+      r.i++;
+      return;
     }
   }
-  return 0;
 }
 
 /* ------------------------------------------------------------------ */
@@ -620,7 +654,7 @@ function tick() {
 
   // 5) Put the glass aside and rise above the table.
   if (phase === "toSand" || phase === "sand" || phase === "done") {
-    overheadView(overhead);
+    overheadView(overhead, dt);
     cam.wantPos.copy(overhead.pos);
     cam.wantLook.copy(overhead.look);
     cam.wantUp.copy(overhead.up);
@@ -641,33 +675,39 @@ function tick() {
     if (u >= 1 && t > 3.2) {
       phase = "sand";
       phaseStart = time;
-      sandRun.steps = buildSandScript();
+      sandRun.steps = sandStory.steps;
+      followX = SAND_BOUNDS.x[0];
       sandRun.i = 0;
-      sandRun.dist = 0;
       sandRun.wait = 0;
     }
   }
 
-  // 6) Sand art: pour along the path, pausing at each stage of the circle.
+  // 6) Sand art: pour the life graph, phase by phase, then bring the pieces together.
   if (phase === "sand") {
-    const flow = runSand(dt);
-    sandRun.dist = Math.min(sandRun.dist, sandPath.total);
-    const pt = sandPath.at(sandRun.dist, tmp2);
-    sandRate = flow;
-    sand.setPour(pt.x, pt.y, SAND_RATE * flow);
-  } else if (phase === "done") {
-    sand.setPour(0, 0, 0);
+    runSand(dt, time);
+    sandRate = sandRun.flow;
+    sand.setPour(sandRun.x, sandRun.z, SAND_RATE * sandRun.flow, sandRun.weight);
+    if (sandRun.finaleAt >= 0) {
+      const ft = time - sandRun.finaleAt;
+      sandRate = ft < 3.6 ? 0.55 * Math.sin(Math.min(ft / 3.6, 1) * Math.PI) + 0.1 : 0;
+      if (ft > 3.4 && !panel.dataset.finale) {
+        panel.dataset.finale = "1";
+        showPanel(story.finale);
+      }
+    }
   }
   const landed = sand.update(dt);
-  if (landed || phase === "done") {
+  const reforming = sand.updateReform(dt);
+  if (phase === "sand" && sandRun.finaleAt >= 0 && !reforming && time - sandRun.finaleAt > 4) phase = "done";
+  if (landed || reforming || phase === "done") {
     // Big textures are expensive to re-upload; phones refresh the sand every other frame.
     if (!isTouch || frameNo % 2 === 0) sand.flush();
   }
-  sound.setSand(sandRate * (phase === "sand" ? 1 : 0));
+  sound.setSand(phase === "sand" ? sandRate : 0);
 
   // Labels follow their spot on the table.
   if (overheadMode) {
-    for (const l of stageLabels) {
+    for (const l of sandLabels) {
       tmp.copy(l.anchor).project(camera);
       l.el.style.transform = `translate(${((tmp.x + 1) / 2) * window.innerWidth}px, ${((1 - tmp.y) / 2) * window.innerHeight}px) translate(-50%, -50%)`;
     }
