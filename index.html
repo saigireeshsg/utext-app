@@ -3,12 +3,12 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#04060b" />
-    <title>Sai Gireesh — Enter the System</title>
+    <meta name="theme-color" content="#030304" />
+    <title>Sai Gireesh — Portfolio</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=JetBrains+Mono:wght@400&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;500;700&family=Inter:wght@300;400;500&family=JetBrains+Mono:wght@400&display=swap"
       rel="stylesheet"
     />
   </head>
@@ -17,19 +17,22 @@
 
     <!-- Entry gate: browsers only allow sound after a user gesture -->
     <div id="gate" class="gate">
-      <p class="mono gate__boot">// system ready</p>
-      <h1 class="gate__title">Enter the system</h1>
-      <p class="gate__hint">Best with sound on 🎧</p>
+      <p class="mono gate__boot">// sound on for the full experience 🎧</p>
       <button id="enter" class="btn" type="button">Enter</button>
     </div>
 
-    <!-- Revealed after the glass arrives -->
-    <header id="intro" class="intro" aria-live="polite">
-      <p class="mono intro__kicker">// stage 01 — arrival</p>
-      <h2 class="intro__name">Hi, I'm Sai Gireesh</h2>
-      <p class="intro__line">Pull up a seat. Let's take a journey through what I build.</p>
-    </header>
-    <p id="next" class="mono next">scroll to begin ↓</p>
+    <!-- Slides in from the side once the glass arrives -->
+    <section id="message" class="message" aria-live="polite">
+      <p class="mono message__kicker">// a quick pause</p>
+      <h1 class="message__title">
+        <span class="line" data-split>You have been screening</span>
+        <span class="line" data-split>a lot of portfolios so far.</span>
+      </h1>
+      <p class="message__sub">
+        <span class="line" data-split>You deserve a break —</span>
+        <span class="line line--accent" data-split>have this glass of water.</span>
+      </p>
+    </section>
 
     <button id="mute" class="mute" type="button" aria-label="Mute sound" hidden>
       <span class="mute__icon" aria-hidden="true">♪</span>

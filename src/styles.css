@@ -1,8 +1,9 @@
 :root {
-  --bg: #04060b;
-  --ink: #e8f1ff;
-  --muted: #8fa3bf;
-  --accent: #6fd3ff;
+  --bg: #030304;
+  --ink: #f3f5f8;
+  --muted: #9aa3ae;
+  --accent: #bfe3ff;
+  --display: "Space Grotesk", "Inter", system-ui, sans-serif;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -25,9 +26,9 @@ html, body {
 
 .mono {
   font-family: "JetBrains Mono", ui-monospace, monospace;
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   letter-spacing: 0.08em;
-  color: var(--accent);
+  color: var(--muted);
 }
 
 /* ---------- Entry gate ---------- */
@@ -38,77 +39,114 @@ html, body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 1rem;
-  padding: 1rem;
+  gap: 1.4rem;
+  padding: 16px;
   text-align: center;
-  background: radial-gradient(ellipse at center, rgba(10, 20, 36, 0.75), rgba(2, 3, 6, 0.96));
-  backdrop-filter: blur(6px);
-  transition: opacity 1.2s ease, visibility 1.2s;
+  background: #000;
+  transition: opacity 1.1s ease, visibility 1.1s;
   z-index: 10;
 }
 .gate.is-hidden { opacity: 0; visibility: hidden; }
-.gate__title {
-  font-weight: 300;
-  font-size: clamp(2rem, 6vw, 4rem);
-  letter-spacing: -0.02em;
-}
-.gate__hint { color: var(--muted); font-size: 0.95rem; }
-.gate__boot { animation: blink 1.4s steps(2) infinite; }
 
 .btn {
-  margin-top: 0.5rem;
-  padding: 0.85rem 2.6rem;
-  font: 600 0.9rem/1 "Inter", sans-serif;
-  letter-spacing: 0.2em;
+  padding: 0.9rem 2.8rem;
+  font: 500 0.85rem/1 var(--display);
+  letter-spacing: 0.32em;
   text-transform: uppercase;
   color: var(--ink);
   background: transparent;
-  border: 1px solid rgba(111, 211, 255, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.35);
   border-radius: 999px;
   cursor: pointer;
-  transition: background 0.3s, box-shadow 0.3s, transform 0.2s;
+  transition: background 0.3s, box-shadow 0.3s, transform 0.2s, border-color 0.3s;
 }
 .btn:hover, .btn:focus-visible {
-  background: rgba(111, 211, 255, 0.12);
-  box-shadow: 0 0 32px rgba(111, 211, 255, 0.35);
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.8);
+  box-shadow: 0 0 40px rgba(255, 244, 226, 0.18);
   outline: none;
 }
 .btn:active { transform: scale(0.97); }
 
-/* ---------- Intro text ---------- */
-.intro {
+/* ---------- Message ---------- */
+.message {
   position: fixed;
-  left: 50%;
-  top: 9vh;
-  transform: translate(-50%, 12px);
-  width: min(92vw, 720px);
-  text-align: center;
-  opacity: 0;
+  left: clamp(16px, 7vw, 120px);
+  top: 50%;
+  transform: translateY(-50%);
+  width: min(52vw, 760px);
   pointer-events: none;
-  transition: opacity 1.4s ease, transform 1.4s ease;
   z-index: 5;
 }
-.intro.is-visible { opacity: 1; transform: translate(-50%, 0); }
-.intro__kicker { margin-bottom: 0.75rem; }
-.intro__name {
-  font-weight: 600;
-  font-size: clamp(2rem, 5.5vw, 3.6rem);
-  letter-spacing: -0.03em;
-  text-shadow: 0 0 40px rgba(111, 211, 255, 0.25);
-}
-.intro__line { margin-top: 0.6rem; color: var(--muted); font-size: clamp(0.95rem, 2vw, 1.1rem); }
-.next {
-  position: fixed;
-  left: 50%;
-  bottom: 28px;
-  transform: translateX(-50%);
-  white-space: nowrap;
+
+.message__kicker {
+  margin-bottom: 1.2rem;
   opacity: 0;
-  transition: opacity 1.4s ease 0.6s;
-  animation: bob 2.2s ease-in-out infinite;
-  z-index: 5;
+  transform: translateX(-24px);
+  transition: opacity 0.8s ease, transform 0.8s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
-.next.is-visible { opacity: 0.85; }
+
+.message__title {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: clamp(1.8rem, 3.3vw, 3.5rem);
+  line-height: 1.04;
+  letter-spacing: -0.035em;
+}
+
+.message__sub {
+  margin-top: 1.4rem;
+  font-family: var(--display);
+  font-weight: 300;
+  font-size: clamp(1.25rem, 2.3vw, 2.1rem);
+  line-height: 1.25;
+  letter-spacing: -0.015em;
+  color: var(--muted);
+}
+
+.line { display: block; white-space: nowrap; }
+.line--accent {
+  color: var(--ink);
+  font-weight: 500;
+}
+.line--accent .word {
+  background: linear-gradient(90deg, #ffffff, var(--accent) 60%, #ffffff);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Each word slides in from the left with a stagger. */
+.word {
+  display: inline-block;
+  opacity: 0;
+  filter: blur(8px);
+  transform: translateX(-60px);
+  transition:
+    opacity 0.9s ease,
+    filter 0.9s ease,
+    transform 1s cubic-bezier(0.16, 1, 0.3, 1);
+  transition-delay: calc(0.25s + var(--i) * 0.07s);
+}
+
+.message.is-visible .message__kicker { opacity: 1; transform: none; }
+.message.is-visible .word { opacity: 1; filter: blur(0); transform: none; }
+
+/* Narrow screens: message sits on top, glass below it. */
+@media (max-aspect-ratio: 11/10) {
+  .message {
+    left: 16px;
+    right: 16px;
+    top: 8vh;
+    transform: none;
+    width: auto;
+    text-align: center;
+  }
+  .line { white-space: normal; }
+  .message__kicker { transform: translateY(-12px); }
+  .message__title { font-size: clamp(1.7rem, 7.5vw, 3rem); }
+  .message__sub { font-size: clamp(1.05rem, 4.2vw, 1.6rem); margin-top: 0.8rem; }
+}
 
 /* ---------- Mute toggle ---------- */
 .mute {
@@ -118,8 +156,8 @@ html, body {
   width: 44px;
   height: 44px;
   border-radius: 50%;
-  border: 1px solid rgba(111, 211, 255, 0.4);
-  background: rgba(4, 6, 11, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: rgba(0, 0, 0, 0.5);
   color: var(--ink);
   font-size: 1.1rem;
   cursor: pointer;
@@ -127,9 +165,6 @@ html, body {
 }
 .mute.is-muted .mute__icon { opacity: 0.35; text-decoration: line-through; }
 
-@keyframes blink { 50% { opacity: 0.2; } }
-@keyframes bob { 50% { transform: translate(-50%, 6px); } }
-
 @media (prefers-reduced-motion: reduce) {
-  .gate__boot, .next { animation: none; }
+  .word, .message__kicker { transform: none; filter: none; transition-duration: 0.4s; }
 }

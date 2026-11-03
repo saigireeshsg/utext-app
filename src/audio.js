@@ -83,9 +83,9 @@ export class SoundEngine {
     // Tiny random jitter makes the friction feel textured, not like a hiss.
     const grain = 0.85 + Math.random() * 0.3;
     this.slideGain.gain.setTargetAtTime(loud * 0.55 * grain, t, 0.03);
-    this.slideBand.frequency.setTargetAtTime(260 + speed * 1100 + proximity * 300, t, 0.05);
+    this.slideBand.frequency.setTargetAtTime(180 + speed * 700 + proximity * 350, t, 0.05);
     this.slideRing.frequency.setTargetAtTime(1900 + speed * 900, t, 0.08);
-    this.slideRingGain.gain.setTargetAtTime(speed * 0.35, t, 0.05);
+    this.slideRingGain.gain.setTargetAtTime(speed * 0.22, t, 0.05);
     if (this.slidePan.pan) this.slidePan.pan.setTargetAtTime(pan, t, 0.05);
   }
 
@@ -167,7 +167,7 @@ export class SoundEngine {
     const ctx = this.ctx;
     const g = ctx.createGain();
     g.gain.value = 0;
-    g.gain.setTargetAtTime(0.05, ctx.currentTime + 0.5, 2.5);
+    g.gain.setTargetAtTime(0.03, ctx.currentTime + 0.5, 2.5);
     g.connect(this.master);
     [55, 82.6, 110.4].forEach((f) => {
       const osc = ctx.createOscillator();
@@ -182,6 +182,63 @@ export class SoundEngine {
       osc.start();
       lfo.start();
     });
+  }
+
+  /* Heavy stage-light switch: a low thunk plus a click. */
+  spotOn() {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime + 0.05;
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    osc.frequency.setValueAtTime(110, t);
+    osc.frequency.exponentialRampToValueAtTime(42, t + 0.25);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.5, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.4);
+    osc.connect(g).connect(this.master);
+    osc.start(t);
+    osc.stop(t + 0.45);
+
+    const click = ctx.createBufferSource();
+    click.buffer = this.noise;
+    const hp = ctx.createBiquadFilter();
+    hp.type = "highpass";
+    hp.frequency.value = 2500;
+    const cg = ctx.createGain();
+    cg.gain.setValueAtTime(0.0001, t);
+    cg.gain.exponentialRampToValueAtTime(0.35, t + 0.002);
+    cg.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
+    click.connect(hp).connect(cg).connect(this.master);
+    click.start(t);
+    click.stop(t + 0.06);
+  }
+
+  /* Soft air whoosh as the message slides in. */
+  whoosh() {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime;
+    const src = ctx.createBufferSource();
+    src.buffer = this.noise;
+    const bp = ctx.createBiquadFilter();
+    bp.type = "bandpass";
+    bp.Q.value = 1.2;
+    bp.frequency.setValueAtTime(300, t);
+    bp.frequency.exponentialRampToValueAtTime(1800, t + 0.35);
+    bp.frequency.exponentialRampToValueAtTime(600, t + 0.9);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.18, t + 0.3);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 1.0);
+    const pan = ctx.createStereoPanner ? ctx.createStereoPanner() : ctx.createGain();
+    if (pan.pan) {
+      pan.pan.setValueAtTime(-0.8, t);
+      pan.pan.linearRampToValueAtTime(0.1, t + 0.9);
+    }
+    src.connect(bp).connect(g).connect(pan).connect(this.master);
+    src.start(t);
+    src.stop(t + 1.05);
   }
 
   toggleMute() {
