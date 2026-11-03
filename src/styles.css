@@ -1,4 +1,135 @@
-.App {
-  font-family: sans-serif;
+:root {
+  --bg: #04060b;
+  --ink: #e8f1ff;
+  --muted: #8fa3bf;
+  --accent: #6fd3ff;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: "Inter", system-ui, sans-serif;
+  overflow: hidden;
+}
+
+#scene {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.mono {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+}
+
+/* ---------- Entry gate ---------- */
+.gate {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 1rem;
   text-align: center;
+  background: radial-gradient(ellipse at center, rgba(10, 20, 36, 0.75), rgba(2, 3, 6, 0.96));
+  backdrop-filter: blur(6px);
+  transition: opacity 1.2s ease, visibility 1.2s;
+  z-index: 10;
+}
+.gate.is-hidden { opacity: 0; visibility: hidden; }
+.gate__title {
+  font-weight: 300;
+  font-size: clamp(2rem, 6vw, 4rem);
+  letter-spacing: -0.02em;
+}
+.gate__hint { color: var(--muted); font-size: 0.95rem; }
+.gate__boot { animation: blink 1.4s steps(2) infinite; }
+
+.btn {
+  margin-top: 0.5rem;
+  padding: 0.85rem 2.6rem;
+  font: 600 0.9rem/1 "Inter", sans-serif;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid rgba(111, 211, 255, 0.55);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.3s, box-shadow 0.3s, transform 0.2s;
+}
+.btn:hover, .btn:focus-visible {
+  background: rgba(111, 211, 255, 0.12);
+  box-shadow: 0 0 32px rgba(111, 211, 255, 0.35);
+  outline: none;
+}
+.btn:active { transform: scale(0.97); }
+
+/* ---------- Intro text ---------- */
+.intro {
+  position: fixed;
+  left: 50%;
+  top: 9vh;
+  transform: translate(-50%, 12px);
+  width: min(92vw, 720px);
+  text-align: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 1.4s ease, transform 1.4s ease;
+  z-index: 5;
+}
+.intro.is-visible { opacity: 1; transform: translate(-50%, 0); }
+.intro__kicker { margin-bottom: 0.75rem; }
+.intro__name {
+  font-weight: 600;
+  font-size: clamp(2rem, 5.5vw, 3.6rem);
+  letter-spacing: -0.03em;
+  text-shadow: 0 0 40px rgba(111, 211, 255, 0.25);
+}
+.intro__line { margin-top: 0.6rem; color: var(--muted); font-size: clamp(0.95rem, 2vw, 1.1rem); }
+.next {
+  position: fixed;
+  left: 50%;
+  bottom: 28px;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 1.4s ease 0.6s;
+  animation: bob 2.2s ease-in-out infinite;
+  z-index: 5;
+}
+.next.is-visible { opacity: 0.85; }
+
+/* ---------- Mute toggle ---------- */
+.mute {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid rgba(111, 211, 255, 0.4);
+  background: rgba(4, 6, 11, 0.6);
+  color: var(--ink);
+  font-size: 1.1rem;
+  cursor: pointer;
+  z-index: 11;
+}
+.mute.is-muted .mute__icon { opacity: 0.35; text-decoration: line-through; }
+
+@keyframes blink { 50% { opacity: 0.2; } }
+@keyframes bob { 50% { transform: translate(-50%, 6px); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .gate__boot, .next { animation: none; }
 }

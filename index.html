@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#04060b" />
+    <title>Sai Gireesh — Enter the System</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=JetBrains+Mono:wght@400&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <canvas id="scene" aria-hidden="true"></canvas>
+
+    <!-- Entry gate: browsers only allow sound after a user gesture -->
+    <div id="gate" class="gate">
+      <p class="mono gate__boot">// system ready</p>
+      <h1 class="gate__title">Enter the system</h1>
+      <p class="gate__hint">Best with sound on 🎧</p>
+      <button id="enter" class="btn" type="button">Enter</button>
+    </div>
+
+    <!-- Revealed after the glass arrives -->
+    <header id="intro" class="intro" aria-live="polite">
+      <p class="mono intro__kicker">// stage 01 — arrival</p>
+      <h2 class="intro__name">Hi, I'm Sai Gireesh</h2>
+      <p class="intro__line">Pull up a seat. Let's take a journey through what I build.</p>
+    </header>
+    <p id="next" class="mono next">scroll to begin ↓</p>
+
+    <button id="mute" class="mute" type="button" aria-label="Mute sound" hidden>
+      <span class="mute__icon" aria-hidden="true">♪</span>
+    </button>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
