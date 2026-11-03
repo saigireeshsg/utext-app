@@ -37,6 +37,7 @@ export class SoundEngine {
 
     this._buildSlide();
     this._buildPour();
+    this._buildSand();
     this._buildAmbience();
   }
 
@@ -187,7 +188,7 @@ export class SoundEngine {
     });
   }
 
-  /* ---- Pouring stream (drinking + refilling) ---- */
+  /* ---- Pouring water (the drinking stream) ---- */
   _buildPour() {
     const ctx = this.ctx;
     const src = ctx.createBufferSource();
@@ -201,6 +202,34 @@ export class SoundEngine {
     this.pourGain.gain.value = 0;
     src.connect(this.pourFilter).connect(this.pourGain).connect(this.master);
     src.start();
+  }
+
+  /* ---- Fine sand running out of a funnel: a soft, grainy hiss ---- */
+  _buildSand() {
+    const ctx = this.ctx;
+    const src = ctx.createBufferSource();
+    src.buffer = this.noise;
+    src.loop = true;
+    const hp = ctx.createBiquadFilter();
+    hp.type = "highpass";
+    hp.frequency.value = 1800;
+    const peak = ctx.createBiquadFilter();
+    peak.type = "peaking";
+    peak.frequency.value = 5200;
+    peak.gain.value = 6;
+    this.sandGain = ctx.createGain();
+    this.sandGain.gain.value = 0;
+    src.connect(hp).connect(peak).connect(this.sandGain).connect(this.master);
+    src.start();
+  }
+
+  /** rate 0..1 */
+  setSand(rate) {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    // random flutter = individual grains ticking
+    const grain = 0.7 + Math.random() * 0.6;
+    this.sandGain.gain.setTargetAtTime(rate * 0.16 * grain, t, 0.02);
   }
 
   /** rate 0..1; pitch 0..1 rises as a vessel fills (that's how you hear a glass filling) */
@@ -232,26 +261,6 @@ export class SoundEngine {
     osc.connect(lp).connect(g).connect(this.master);
     osc.start(t);
     osc.stop(t + 0.22);
-  }
-
-  /** A droplet landing on the screen. Throttled so a burst doesn't clip. */
-  drip() {
-    if (!this.ctx) return;
-    const ctx = this.ctx;
-    const t = ctx.currentTime;
-    if (this._lastDrip && t - this._lastDrip < 0.04) return;
-    this._lastDrip = t;
-    const osc = ctx.createOscillator();
-    const g = ctx.createGain();
-    const f = 700 + Math.random() * 900;
-    osc.frequency.setValueAtTime(f, t);
-    osc.frequency.exponentialRampToValueAtTime(f * 2.4, t + 0.05);
-    g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(0.06, t + 0.006);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.08);
-    osc.connect(g).connect(this.master);
-    osc.start(t);
-    osc.stop(t + 0.09);
   }
 
   /** Glass set back down on the table. */

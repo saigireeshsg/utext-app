@@ -2,6 +2,9 @@ import * as THREE from "three";
 import { Reflector } from "three/addons/objects/Reflector.js";
 import { createGlassOfWater } from "./glass.js";
 import { SoundEngine } from "./audio.js";
+import { createPourStream } from "./pourStream.js";
+import { createSand, createSandPath } from "./sand.js";
+import { story } from "./story.js";
 import "./styles.css";
 
 /* ------------------------------------------------------------------ */
@@ -219,151 +222,33 @@ const SLIDE_SECONDS = 4.0;
 let restX = 0; // set by layout(): glass sits right of centre on wide screens
 let lookY = LOOK.y;
 const restPos = () => new THREE.Vector3(restX, glass.HEIGHT, Z_END + glass.R_TOP);
+// Where the empty glass is put while the sand art is drawn (the empty far-left corner).
+const ASIDE = new THREE.Vector3(-3.25, glass.HEIGHT, -2.55 + glass.R_TOP);
 rig.position.set(0, glass.HEIGHT, Z_FAR);
 
-function placeSpot() {
-  spot.position.set(restX, SPOT_HEIGHT, Z_END + 0.4);
-  spot.target.position.set(restX, 0, Z_END);
+const pour = createPourStream();
+scene.add(pour.group);
+
+/* ------------------------------------------------------------------ */
+/* Sand art                                                            */
+/* ------------------------------------------------------------------ */
+const sand = createSand({ size: 7.4, center: [-0.5, -0.5], resolution: isTouch ? 1024 : 1536 });
+scene.add(sand.group);
+const sandPath = createSandPath({ lineStart: [-3.75], circleCenter: [0.5, -0.5], radius: 2.05 });
+// Region the overhead camera must frame: the drawing, its labels, and the glass set aside.
+const SAND_BOUNDS = { x: [-4.15, 3.6], z: [-3.35, 2.25] };
+const SAND_SPOT = { x: 0.15, z: -0.5, angle: 0.5 };
+
+/* ------------------------------------------------------------------ */
+/* Spotlight placement                                                 */
+/* ------------------------------------------------------------------ */
+const spotPose = { x: 0, z: Z_END, angle: SPOT_ANGLE };
+function applySpot() {
+  spot.position.set(spotPose.x, SPOT_HEIGHT, spotPose.z + 0.4);
+  spot.target.position.set(spotPose.x, 0, spotPose.z);
+  spot.angle = spotPose.angle;
   beam.position.copy(spot.position);
   beam.rotation.x = Math.atan2(0.4, SPOT_HEIGHT) * -1;
-}
-
-// Refill stream (falls from above into the glass)
-const stream = new THREE.Mesh(
-  new THREE.CylinderGeometry(0.035, 0.05, 1, 16, 1, true),
-  new THREE.MeshPhysicalMaterial({
-    color: 0xffffff,
-    transparent: true,
-    opacity: 0.45,
-    roughness: 0.05,
-    envMapIntensity: 3,
-    depthWrite: false,
-  })
-);
-stream.visible = false;
-scene.add(stream);
-
-// Water thrown out of the glass toward the viewer.
-const SPRAY = 420;
-const sprayGeo = new THREE.BufferGeometry();
-const sprayPos = new Float32Array(SPRAY * 3).fill(-999);
-sprayGeo.setAttribute("position", new THREE.BufferAttribute(sprayPos, 3));
-const sprayVel = new Float32Array(SPRAY * 3);
-const sprayAlive = new Uint8Array(SPRAY);
-let sprayNext = 0;
-const spray = new THREE.Points(
-  sprayGeo,
-  new THREE.PointsMaterial({
-    color: 0xe8f4ff,
-    size: 0.07,
-    transparent: true,
-    opacity: 0.8,
-    depthWrite: false,
-    map: (() => {
-      const c = document.createElement("canvas");
-      c.width = c.height = 32;
-      const g = c.getContext("2d");
-      const grad = g.createRadialGradient(16, 16, 0, 16, 16, 16);
-      grad.addColorStop(0, "rgba(255,255,255,1)");
-      grad.addColorStop(0.5, "rgba(220,235,255,0.6)");
-      grad.addColorStop(1, "rgba(255,255,255,0)");
-      g.fillStyle = grad;
-      g.fillRect(0, 0, 32, 32);
-      return new THREE.CanvasTexture(c);
-    })(),
-  })
-);
-spray.frustumCulled = false;
-scene.add(spray);
-
-const GRAVITY = 5;
-const aim = new THREE.Vector3();
-/** Throw water from the lip toward the camera, so it lands on the "lens". */
-function emitSpray(origin, count) {
-  for (let n = 0; n < count; n++) {
-    const i = sprayNext;
-    sprayNext = (sprayNext + 1) % SPRAY;
-    sprayAlive[i] = 1;
-    sprayPos[i * 3] = origin.x + (Math.random() - 0.5) * 0.4;
-    sprayPos[i * 3 + 1] = origin.y + (Math.random() - 0.5) * 0.1;
-    sprayPos[i * 3 + 2] = origin.z + Math.random() * 0.1;
-    // aim at a random spot around the camera; some fall short and drop away
-    aim.set(
-      camera.position.x + (Math.random() - 0.5) * 2.6,
-      camera.position.y + (Math.random() - 0.62) * 1.8,
-      camera.position.z
-    );
-    const flight = 0.55 + Math.random() * 0.35;
-    const short = Math.random() < 0.3 ? 0.6 : 1;
-    sprayVel[i * 3] = ((aim.x - sprayPos[i * 3]) / flight) * short;
-    sprayVel[i * 3 + 1] = (aim.y - sprayPos[i * 3 + 1]) / flight + 0.5 * GRAVITY * flight;
-    sprayVel[i * 3 + 2] = ((aim.z - sprayPos[i * 3 + 2]) / flight) * short;
-  }
-}
-
-/* ------------------------------------------------------------------ */
-/* Droplets on the screen                                               */
-/* ------------------------------------------------------------------ */
-const dropsCanvas = document.getElementById("drops");
-const dctx = dropsCanvas.getContext("2d");
-const wet = document.getElementById("wet");
-let drops = [];
-let dropScale = 1;
-
-function sizeDrops() {
-  dropScale = Math.min(window.devicePixelRatio, 2);
-  dropsCanvas.width = Math.floor(window.innerWidth * dropScale);
-  dropsCanvas.height = Math.floor(window.innerHeight * dropScale);
-}
-
-function addDrop(x, y, big = false) {
-  if (drops.length > 260) drops.shift();
-  const base = Math.min(window.innerWidth, window.innerHeight);
-  const r = (big ? 0.025 + Math.random() * 0.04 : 0.006 + Math.random() * 0.018) * base;
-  drops.push({ x, y, r, vy: 0, life: 1, hold: 1.5 + Math.random() * 2.5 });
-}
-
-function drawDrops(dt) {
-  const k = dropScale;
-  dctx.clearRect(0, 0, dropsCanvas.width, dropsCanvas.height);
-  drops = drops.filter((d) => d.life > 0);
-  for (const d of drops) {
-    d.hold -= dt;
-    if (d.hold < 0) {
-      // bigger drops run down the glass, small ones just evaporate
-      if (d.r > 10) d.vy = Math.min(d.vy + dt * 60, 160);
-      d.life -= dt * 0.35;
-    }
-    d.y += d.vy * dt;
-    const x = d.x * k;
-    const y = d.y * k;
-    const r = d.r * k;
-    const ry = r * (1 + Math.min(d.vy / 200, 0.35));
-    const a = Math.max(d.life, 0);
-    dctx.save();
-    dctx.globalAlpha = a;
-    // refraction body: darker lower rim, clear middle
-    const body = dctx.createRadialGradient(x, y - ry * 0.25, r * 0.1, x, y, r);
-    body.addColorStop(0, "rgba(210,230,255,0.06)");
-    body.addColorStop(0.7, "rgba(160,190,220,0.12)");
-    body.addColorStop(1, "rgba(0,0,0,0.35)");
-    dctx.fillStyle = body;
-    dctx.beginPath();
-    dctx.ellipse(x, y, r, ry, 0, 0, Math.PI * 2);
-    dctx.fill();
-    // rim light
-    dctx.strokeStyle = "rgba(255,255,255,0.28)";
-    dctx.lineWidth = Math.max(1, r * 0.06);
-    dctx.beginPath();
-    dctx.ellipse(x, y, r * 0.96, ry * 0.96, 0, Math.PI * 0.95, Math.PI * 1.9);
-    dctx.stroke();
-    // specular highlight
-    dctx.fillStyle = "rgba(255,255,255,0.85)";
-    dctx.beginPath();
-    dctx.ellipse(x - r * 0.35, y - ry * 0.4, r * 0.18, r * 0.11, -0.6, 0, Math.PI * 2);
-    dctx.fill();
-    dctx.restore();
-  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -375,8 +260,10 @@ const messages = {
   welcome: document.getElementById("message"),
   refreshed: document.getElementById("message-refreshed"),
 };
-const drinkBtn = document.getElementById("drink");
+const actionBtn = document.getElementById("drink");
 const muteBtn = document.getElementById("mute");
+const panel = document.getElementById("panel");
+const labelsEl = document.getElementById("labels");
 const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 // Split message lines into words so each one can slide in on its own.
@@ -403,19 +290,44 @@ function showMessage(name) {
 let hideTimer = 0;
 function showButton(label) {
   clearTimeout(hideTimer);
-  drinkBtn.querySelector(".drink__label").textContent = label;
-  drinkBtn.disabled = false;
-  drinkBtn.hidden = false;
-  requestAnimationFrame(() => drinkBtn.classList.add("is-visible"));
+  actionBtn.querySelector(".drink__label").textContent = label;
+  actionBtn.disabled = false;
+  actionBtn.hidden = false;
+  requestAnimationFrame(() => actionBtn.classList.add("is-visible"));
 }
-
 function hideButton() {
-  drinkBtn.classList.remove("is-visible");
-  drinkBtn.disabled = true;
-  hideTimer = setTimeout(() => (drinkBtn.hidden = true), 400);
+  actionBtn.classList.remove("is-visible");
+  actionBtn.disabled = true;
+  hideTimer = setTimeout(() => (actionBtn.hidden = true), 400);
 }
 
-// idle → lights → sliding → full ⇄ drinking → empty → refilling → full
+// Caption panel for the sand art.
+let panelTimer = 0;
+function showPanel({ kicker, title, body }) {
+  clearTimeout(panelTimer);
+  const fill = () => {
+    panel.querySelector(".panel__kicker").textContent = kicker;
+    panel.querySelector(".panel__title").textContent = title;
+    panel.querySelector(".panel__body").textContent = body;
+    panel.classList.add("is-visible");
+    panel.classList.remove("is-changing");
+  };
+  if (panel.classList.contains("is-visible")) {
+    panel.classList.add("is-changing");
+    panelTimer = setTimeout(fill, 350);
+  } else fill();
+}
+
+// One label per stage, placed just outside the circle.
+const stageLabels = story.stages.map((st) => {
+  const el = document.createElement("div");
+  el.className = "stage-label";
+  el.textContent = st.label;
+  labelsEl.append(el);
+  return { el, anchor: sandPath.pointAtAngle(st.angle, 0.62) };
+});
+
+// idle → lights → sliding → full → drinking → empty → toSand → sand → done
 let phase = "idle";
 let phaseStart = 0;
 let lightLevel = 0;
@@ -430,12 +342,13 @@ document.getElementById("enter").addEventListener("click", () => {
   sound.spotOn();
 });
 
-drinkBtn.addEventListener("click", () => {
+actionBtn.addEventListener("click", () => {
   if (phase === "full") {
     phase = "drinking";
     drink.from.copy(rig.position);
   } else if (phase === "empty") {
-    phase = "refilling";
+    phase = "toSand";
+    aside.from.copy(rig.position);
   } else return;
   phaseStart = debugTime ?? clock.getElapsedTime();
   hideButton();
@@ -457,18 +370,16 @@ const easeOut = (u) => 1 - Math.pow(1 - u, EASE_POW);
 const easeVel = (u) => EASE_POW * Math.pow(1 - u, EASE_POW - 1);
 const MAX_VEL = easeVel(0);
 const easeInOut = (u) => (u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2);
+const easeSine = (u) => 0.5 - 0.5 * Math.cos(Math.PI * u);
 const seg = (t, a, b) => THREE.MathUtils.clamp((t - a) / (b - a), 0, 1);
 
-// Drinking timeline (seconds)
-const DRINK = { lift: [0, 1.1], tilt: [1.1, 3.6], hold: [3.6, 4.1], back: [4.1, 5.4] };
-const TILT_MAX = 1.55; // ~90°: glass tipped toward the viewer until it is empty
-const REFILL_SECONDS = 2.6;
-const drink = {
-  from: new THREE.Vector3(),
-  to: new THREE.Vector3(),
-  lastGulp: 0,
-  spillLevel: 1,
-};
+// Drinking: lift it up, tip it to the point of pouring, then drain it slowly.
+const DRINK = { lift: [0, 1.2], tip: [1.2, 2.0], drain: [2.0, 4.9], back: [5.3, 6.6] };
+const TIP_START = 0.8; // just short of where water reaches the lip (~50°)
+const TIP_END = 1.47; // ~84°: the last of the water runs out
+const drink = { from: new THREE.Vector3(), to: new THREE.Vector3(), lastGulp: 0 };
+const stream = { rate: 0, head: 0, tail: 0, theta: 0 };
+const aside = { from: new THREE.Vector3() };
 
 const slosh = { tilt: 0, vel: 0, rock: 0, rockVel: 0, ripple: 0 };
 const mouse = new THREE.Vector2();
@@ -480,9 +391,18 @@ window.addEventListener("pointermove", (e) => {
 const clock = new THREE.Clock();
 let prevTime = 0;
 let settledAt = 0;
-let wetness = 0;
-const camTarget = new THREE.Vector3();
 const tmp = new THREE.Vector3();
+const tmp2 = new THREE.Vector2();
+const vel0 = new THREE.Vector3();
+const drinkLook = new THREE.Vector3();
+
+// Camera is eased toward a desired pose every frame.
+const cam = {
+  look: new THREE.Vector3().copy(LOOK),
+  wantPos: new THREE.Vector3(),
+  wantLook: new THREE.Vector3(),
+  wantUp: new THREE.Vector3(0, 1, 0),
+};
 
 /** The fullest the glass can be at tilt θ before water runs over the lip. */
 function maxFillAt(theta) {
@@ -492,21 +412,101 @@ function maxFillAt(theta) {
   return THREE.MathUtils.clamp((level - lo) / (glass.WATER_LEVEL - lo), 0, 1);
 }
 
+/** Overhead framing that fits the sand drawing, leaving room for the caption. */
+function overheadView(out) {
+  const portrait = camera.aspect < 1.1;
+  const [x0, x1] = SAND_BOUNDS.x;
+  const [z0, z1] = SAND_BOUNDS.z;
+  const cx = (x0 + x1) / 2;
+  const cz = (z0 + z1) / 2;
+  // On portrait screens the camera is turned 90° so the long line runs up the screen.
+  const halfW = portrait ? (z1 - z0) / 2 : (x1 - x0) / 2;
+  const halfH = portrait ? (x1 - x0) / 2 : (z1 - z0) / 2;
+  const tanV = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+  const reserved = portrait ? 0.3 : 0.22; // bottom of the screen kept for the caption
+  const h = Math.max(halfH / (tanV * (1 - reserved)), halfW / (tanV * camera.aspect)) * 1.04;
+  const down = portrait ? tmp.set(-1, 0, 0) : tmp.set(0, 0, 1); // screen-down, in world
+  const shift = (reserved / 2) * 2 * h * tanV;
+  out.look.set(cx + down.x * shift, 0, cz + down.z * shift);
+  out.pos.set(out.look.x + down.x * h * 0.16, h, out.look.z + down.z * h * 0.16);
+  out.up.set(portrait ? 1 : 0, 0, portrait ? 0 : -1);
+  return out;
+}
+const overhead = { pos: new THREE.Vector3(), look: new THREE.Vector3(), up: new THREE.Vector3() };
+
+/* ------------------------------------------------------------------ */
+/* Sand script                                                         */
+/* ------------------------------------------------------------------ */
+const SAND_RATE = isTouch ? 300 : 380; // falling grain-clusters per second
+const SPEED_LINE = reduceMotion ? 2.4 : 0.95;
+const SPEED_CIRCLE = reduceMotion ? 2.8 : 1.2;
+function buildSandScript() {
+  const steps = [{ panel: story.line }, { pourTo: sandPath.lineLength, speed: SPEED_LINE }];
+  steps.push({ panel: story.bend }, { dwell: 1.8 });
+  story.stages.forEach((st, i) => {
+    steps.push({ pourTo: sandPath.distanceAtAngle(st.angle), speed: SPEED_CIRCLE });
+    steps.push({ stage: i }, { dwell: 2.2 });
+  });
+  steps.push({ pourTo: sandPath.total, speed: SPEED_CIRCLE }, { close: true });
+  return steps;
+}
+const sandRun = { steps: [], i: 0, dist: 0, wait: 0, pouring: false };
+
+function runSand(dt) {
+  const r = sandRun;
+  while (r.i < r.steps.length) {
+    const st = r.steps[r.i];
+    if (st.panel) {
+      showPanel(st.panel);
+      r.i++;
+    } else if (st.stage !== undefined) {
+      const s = story.stages[st.stage];
+      stageLabels[st.stage].el.classList.add("is-visible");
+      showPanel({
+        kicker: `// ${String(st.stage + 1).padStart(2, "0")} of ${String(story.stages.length).padStart(2, "0")}`,
+        title: s.label,
+        body: s.body,
+      });
+      r.i++;
+    } else if (st.close) {
+      showPanel(story.close);
+      phase = "done";
+      r.pouring = false;
+      r.i++;
+    } else if (st.dwell !== undefined) {
+      r.wait += dt;
+      r.pouring = true;
+      if (r.wait < st.dwell) return 0.45; // keep a trickle going: it builds a small mound
+      r.wait = 0;
+      r.i++;
+    } else if (st.pourTo !== undefined) {
+      r.pouring = true;
+      r.dist = Math.min(r.dist + st.speed * dt, st.pourTo);
+      if (r.dist < st.pourTo) return 1;
+      r.i++;
+    }
+  }
+  return 0;
+}
+
 /* ------------------------------------------------------------------ */
 /* Frame loop                                                          */
 /* ------------------------------------------------------------------ */
 let debugTime = null; // set from the ?debug helper to step time manually
+let frameNo = 0;
 function tick() {
   const time = debugTime ?? clock.getElapsedTime();
   const dt = Math.min(time - prevTime, 1 / 30);
   prevTime = time;
   const t = time - phaseStart;
+  frameNo++;
 
   let speed = 0;
   let tiltTarget = 0;
   let theta = 0;
-  let pourRate = 0;
-  let pourPitch = 0.5;
+  let camEase = 3;
+  let sandRate = 0;
+  let pourPan = 0;
 
   // 1) Spotlight switches on over the empty table.
   if (phase === "lights" && t > 1.1) {
@@ -515,9 +515,17 @@ function tick() {
   }
   const lightsOn = phase !== "idle";
   lightLevel += ((lightsOn ? 1 : 0) - lightLevel) * Math.min(dt * 3.5, 1);
-  spot.intensity = 140 * lightLevel * (lightLevel < 0.95 ? 0.85 + Math.random() * 0.15 : 1);
-  beam.material.uniforms.uOpacity.value = 0.07 * lightLevel;
+  const overheadMode = phase === "toSand" || phase === "sand" || phase === "done";
+  const beamLevel = overheadMode ? Math.max(0, 1 - t / 1.2) : 1;
+  spot.intensity = (overheadMode ? 105 : 140) * lightLevel * (lightLevel < 0.95 ? 0.85 + Math.random() * 0.15 : 1);
+  beam.material.uniforms.uOpacity.value = 0.07 * lightLevel * (phase === "toSand" ? beamLevel : overheadMode ? 0 : 1);
   dust.material.opacity = 0.6 * lightLevel;
+
+  // Default camera: in front of the table with gentle mouse parallax.
+  const settle = Math.min((time - settledAt) / 2, 1);
+  cam.wantPos.set(CAM_END.x + mouse.x * 0.5 * settle, CAM_END.y - mouse.y * 0.25 * settle, CAM_END.z);
+  cam.wantLook.set(LOOK.x + restX * 0.35, lookY, LOOK.z);
+  cam.wantUp.set(0, 1, 0);
 
   // 2) The glass slides down the table toward the viewer.
   if (phase === "sliding") {
@@ -530,6 +538,7 @@ function tick() {
     speed = easeVel(u) / MAX_VEL;
     tiltTarget = u < 1 ? 0.09 : 0; // decelerating ⇒ water leans forward
     camera.position.lerpVectors(CAM_START, CAM_END, p);
+    cam.wantPos.copy(camera.position);
 
     if (u >= 1) {
       phase = "full";
@@ -544,34 +553,37 @@ function tick() {
     }
   }
 
-  // 4) Drink: lift toward the viewer, tip it over, put it back.
+  // 4) Drink: raise it to the viewer, tip it until the water runs out in one smooth stream.
   if (phase === "drinking") {
     const rest = restPos();
-    const portrait = camera.aspect < 0.8;
-    drink.to.set(restX * 0.3, portrait ? 2.6 : 2.4, portrait ? 4.4 : 5.4);
+    const portrait = camera.aspect < 1.1;
+    drink.to.set(restX * 0.12, portrait ? 2.95 : 2.95, portrait ? 6.3 : 6.5);
     const lift = easeInOut(seg(t, ...DRINK.lift));
-    const tip = easeInOut(seg(t, ...DRINK.tilt));
     const back = easeInOut(seg(t, ...DRINK.back));
-
     tmp.lerpVectors(drink.from, drink.to, lift);
-    tmp.y += Math.sin(lift * Math.PI) * 0.4; // a little arc on the way up
+    tmp.y += Math.sin(lift * Math.PI) * 0.3;
     tmp.lerp(rest, back);
     rig.position.copy(tmp);
-    theta = TILT_MAX * tip * (1 - back);
+    theta =
+      (TIP_START * easeInOut(seg(t, ...DRINK.tip)) +
+        (TIP_END - TIP_START) * easeSine(seg(t, ...DRINK.drain))) *
+      (1 - back);
     rig.rotation.x = theta;
 
-    // Water spills over the lip once the surface reaches it.
-    const allowed = maxFillAt(theta);
-    if (allowed < fill) {
-      const spilled = fill - allowed;
-      fill = allowed;
-      pourRate = Math.min(spilled / dt / 1.2, 1);
-      emitSpray(rig.position, Math.ceil(spilled * 320));
-      wetness = Math.min(wetness + spilled * 2.2, 1);
-      if (time - drink.lastGulp > 0.34) {
-        drink.lastGulp = time;
-        sound.gulp();
-      }
+    // Look up at the glass while it's raised.
+    // Drinker's point of view: the glass comes to the bottom of the frame, and the
+    // head tilts back as the glass tips up.
+    const tipNow = theta / TIP_END;
+    drinkLook.set(drink.to.x, 3.1 + tipNow * 1.6, drink.to.z - 5);
+    cam.wantLook.lerp(drinkLook, lift * (1 - back));
+
+    const before = fill;
+    fill = Math.min(fill, maxFillAt(theta));
+    const raw = (before - fill) / Math.max(dt, 1e-3);
+    stream.rate += (Math.min(raw * 1.9, 1) - stream.rate) * Math.min(dt * 10, 1);
+    if (stream.rate > 0.2 && time - drink.lastGulp > 0.55) {
+      drink.lastGulp = time;
+      sound.gulp();
     }
     if (t >= DRINK.back[1]) {
       phase = "empty";
@@ -582,39 +594,84 @@ function tick() {
       slosh.rockVel += 0.6;
       settledAt = time;
       setTimeout(() => showMessage("refreshed"), 500);
-      setTimeout(() => showButton("Refill the glass"), 2200);
+      setTimeout(() => showButton("Know about me"), 2200);
     }
   }
 
-  // 5) Refill from a stream above.
-  if (phase === "refilling") {
-    const u = seg(t, 0.3, 0.3 + REFILL_SECONDS);
-    const pouring = t > 0.15 && u < 1;
-    fill = easeInOut(u);
-    if (pouring) {
-      pourRate = 0.8;
-      pourPitch = fill;
-      slosh.ripple = Math.max(slosh.ripple, 0.6);
-    }
-    const p = restPos();
-    const surface = glass.BASE + 0.15 + (glass.WATER_LEVEL - glass.BASE - 0.15) * fill;
-    const top = 12;
-    const bottom = t < 0.3 ? top - (t / 0.3) * (top - surface) : surface;
-    const startY = u >= 1 ? Math.min(top, surface + (t - 0.3 - REFILL_SECONDS) * 30) : top;
-    stream.visible = startY - bottom > 0.05;
-    stream.scale.y = Math.max(startY - bottom, 0.001);
-    stream.position.set(p.x, (startY + bottom) / 2, p.z - glass.R_TOP);
-    if (t > 0.6 + REFILL_SECONDS) {
-      phase = "full";
-      fill = 1;
-      stream.visible = false;
-      settledAt = time;
-      showMessage("welcome");
-      setTimeout(() => showButton("Drink the water"), 1400);
+  // The laminar stream: attached to the lip while water flows, then the tail falls away.
+  if (stream.rate > 0.03) {
+    stream.head = Math.min(stream.head + dt, 0.6);
+    stream.tail = 0;
+    stream.theta = theta;
+  } else if (stream.head > 0) {
+    stream.head += dt;
+    stream.tail += dt * 1.4;
+    if (stream.tail >= stream.head) stream.head = stream.tail = 0;
+  }
+  {
+    const th = stream.theta;
+    // water leaves along the lip's outward direction, faster when the pour is heavier
+    // ...and keeps the glass's forward momentum, so it arcs toward the viewer (the drinker).
+    const out = 0.8 + 1.1 * Math.max(stream.rate, 0.2);
+    vel0.set(0, -Math.sin(th) * out * 0.35, Math.cos(th) * out * 0.4 + 1.7);
+    pour.update(rig.position, vel0, 6, 0.024 + 0.06 * Math.sqrt(stream.rate), stream.tail, stream.head);
+  }
+  sound.setPour(stream.rate * 0.55, 0.35);
+
+  // 5) Put the glass aside and rise above the table.
+  if (phase === "toSand" || phase === "sand" || phase === "done") {
+    overheadView(overhead);
+    cam.wantPos.copy(overhead.pos);
+    cam.wantLook.copy(overhead.look);
+    cam.wantUp.copy(overhead.up);
+    camEase = phase === "toSand" ? 1.4 : 2;
+  }
+  if (phase === "toSand") {
+    const u = seg(t, 0.2, 1.9);
+    const p = easeInOut(u);
+    rig.position.lerpVectors(aside.from, ASIDE, p);
+    glass.group.rotation.y = p * 0.6;
+    speed = u > 0 && u < 1 ? Math.sin(u * Math.PI) * 0.55 : 0;
+    pourPan = 0.4;
+    const s = easeInOut(seg(t, 0.4, 2.6));
+    spotPose.x = THREE.MathUtils.lerp(restX, SAND_SPOT.x, s);
+    spotPose.z = THREE.MathUtils.lerp(Z_END, SAND_SPOT.z, s);
+    spotPose.angle = THREE.MathUtils.lerp(SPOT_ANGLE, SAND_SPOT.angle, s);
+    applySpot();
+    if (u >= 1 && t > 3.2) {
+      phase = "sand";
+      phaseStart = time;
+      sandRun.steps = buildSandScript();
+      sandRun.i = 0;
+      sandRun.dist = 0;
+      sandRun.wait = 0;
     }
   }
 
-  sound.setPour(pourRate, pourPitch);
+  // 6) Sand art: pour along the path, pausing at each stage of the circle.
+  if (phase === "sand") {
+    const flow = runSand(dt);
+    sandRun.dist = Math.min(sandRun.dist, sandPath.total);
+    const pt = sandPath.at(sandRun.dist, tmp2);
+    sandRate = flow;
+    sand.setPour(pt.x, pt.y, SAND_RATE * flow);
+  } else if (phase === "done") {
+    sand.setPour(0, 0, 0);
+  }
+  const landed = sand.update(dt);
+  if (landed || phase === "done") {
+    // Big textures are expensive to re-upload; phones refresh the sand every other frame.
+    if (!isTouch || frameNo % 2 === 0) sand.flush();
+  }
+  sound.setSand(sandRate * (phase === "sand" ? 1 : 0));
+
+  // Labels follow their spot on the table.
+  if (overheadMode) {
+    for (const l of stageLabels) {
+      tmp.copy(l.anchor).project(camera);
+      l.el.style.transform = `translate(${((tmp.x + 1) / 2) * window.innerWidth}px, ${((1 - tmp.y) / 2) * window.innerHeight}px) translate(-50%, -50%)`;
+    }
+  }
 
   // Water + glass spring dynamics.
   slosh.vel += (-55 * (slosh.tilt - tiltTarget) - 3.0 * slosh.vel) * dt;
@@ -628,62 +685,38 @@ function tick() {
   const level = Math.tan(Math.min(theta, 1.45));
   glass.update(-Math.sin(ry) * slosh.tilt, Math.cos(ry) * slosh.tilt + level, time, slosh.ripple, fill);
 
-  // Spray physics: anything that reaches the lens becomes a droplet on screen.
-  let anySpray = false;
-  for (let i = 0; i < SPRAY; i++) {
-    if (!sprayAlive[i]) continue;
-    anySpray = true;
-    sprayVel[i * 3 + 1] -= GRAVITY * dt;
-    sprayPos[i * 3] += sprayVel[i * 3] * dt;
-    sprayPos[i * 3 + 1] += sprayVel[i * 3 + 1] * dt;
-    sprayPos[i * 3 + 2] += sprayVel[i * 3 + 2] * dt;
-    tmp.set(sprayPos[i * 3], sprayPos[i * 3 + 1], sprayPos[i * 3 + 2]);
-    if (tmp.z > camera.position.z - 0.9) {
-      tmp.project(camera);
-      if (Math.abs(tmp.x) < 1.2 && Math.abs(tmp.y) < 1.2) {
-        addDrop(((tmp.x + 1) / 2) * window.innerWidth, ((1 - tmp.y) / 2) * window.innerHeight, Math.random() < 0.25);
-        sound.drip();
-      }
-      sprayAlive[i] = 0;
-      sprayPos[i * 3 + 1] = -999;
-    } else if (tmp.y < -1) {
-      sprayAlive[i] = 0;
-      sprayPos[i * 3 + 1] = -999;
-    }
-  }
-  if (anySpray) sprayGeo.attributes.position.needsUpdate = true;
-
-  wetness *= Math.exp(-dt * 0.45);
-  wet.style.opacity = wetness.toFixed(3);
-  drawDrops(dt);
-
   // Sound follows the glass on its slide: louder and brighter as it approaches.
-  const proximity = THREE.MathUtils.clamp((rig.position.z - Z_FAR) / (Z_END - Z_FAR), 0, 1);
-  sound.updateSlide(speed, proximity * proximity, (rig.position.x / 6) * proximity);
+  const proximity = phase === "toSand" ? 0.6 : THREE.MathUtils.clamp((rig.position.z - Z_FAR) / (Z_END - Z_FAR), 0, 1);
+  sound.updateSlide(speed, proximity * proximity, phase === "toSand" ? pourPan : (rig.position.x / 6) * proximity);
 
-  // Gentle parallax once it has arrived (mouse only; touch screens stay still).
-  if (phase !== "idle" && phase !== "lights" && phase !== "sliding") {
-    const settle = Math.min((time - settledAt) / 2, 1);
-    camTarget.set(CAM_END.x + mouse.x * 0.5 * settle, CAM_END.y - mouse.y * 0.25 * settle, CAM_END.z);
-    camera.position.lerp(camTarget, 0.04);
+  // Ease the camera toward where it wants to be.
+  if (phase !== "sliding") {
+    const k = 1 - Math.exp(-dt * camEase);
+    camera.position.lerp(cam.wantPos, k);
+    cam.look.lerp(cam.wantLook, k);
+    camera.up.lerp(cam.wantUp, k).normalize();
+  } else {
+    cam.look.copy(cam.wantLook);
   }
-  camera.lookAt(LOOK.x + restX * 0.35, lookY, LOOK.z);
+  camera.lookAt(cam.look);
 
-  // Dust drift
+  // Dust drift inside the beam
+  const beamR = Math.tan(spot.angle) * SPOT_HEIGHT * 0.9;
   for (let i = 0; i < DUST; i++) {
     const d = dustSeed[i];
     const y = (d.y + time * d.s) % 1;
-    const rad = d.r * Math.tan(SPOT_ANGLE) * SPOT_HEIGHT * (1 - y) * 0.9;
+    const rad = d.r * beamR * (1 - y);
     const a = d.a + time * 0.05;
     dustPos[i * 3] = spot.position.x + Math.cos(a) * rad;
     dustPos[i * 3 + 1] = y * SPOT_HEIGHT;
-    dustPos[i * 3 + 2] = Z_END + Math.sin(a) * rad;
+    dustPos[i * 3 + 2] = spot.target.position.z + Math.sin(a) * rad;
   }
   dustGeo.attributes.position.needsUpdate = true;
 
-  renderer.render(scene, camera);
+  if (!skipRender) renderer.render(scene, camera);
   requestAnimationFrame(tick);
 }
+let skipRender = false; // debug: fast-forward without drawing
 
 /* ------------------------------------------------------------------ */
 /* Layout                                                              */
@@ -698,16 +731,18 @@ function layout() {
   // Narrow: glass centred and lower, message above it.
   restX = wide ? 1.7 : 0;
   lookY = wide ? LOOK.y : 2.5;
-  // Keep a ~30° horizontal view on portrait screens so the glass still fits across.
+  // Keep a ~32° horizontal view on portrait screens so the glass still fits across.
   camera.fov = wide
     ? 36
     : Math.min(THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(16)) / aspect)), 68);
   camera.updateProjectionMatrix();
   renderer.setSize(w, h);
   mirror.getRenderTarget().setSize(Math.floor(w * MIRROR_RES), Math.floor(h * MIRROR_RES));
-  sizeDrops();
-  placeSpot();
-  if (phase === "full" || phase === "empty" || phase === "refilling") rig.position.copy(restPos());
+  if (phase === "idle" || phase === "lights" || phase === "sliding" || phase === "full" || phase === "empty") {
+    spotPose.x = restX;
+    applySpot();
+  }
+  if (phase === "full" || phase === "empty") rig.position.copy(restPos());
 }
 window.addEventListener("resize", layout);
 layout();
@@ -716,10 +751,11 @@ requestAnimationFrame(tick);
 // Dev helper: open with ?debug to poke at the scene from the console.
 if (import.meta.env.DEV || new URLSearchParams(location.search).has("debug")) {
   window.__portfolio = {
-    scene, camera, renderer, glass, rig, spot, beam, messages, restPos,
+    scene, camera, renderer, glass, rig, spot, beam, messages, restPos, sand, sandRun,
     setPhase: (p) => { phase = p; phaseStart = debugTime ?? clock.getElapsedTime(); },
     getPhase: () => phase,
     setTime: (t) => (debugTime = t),
+    setSkipRender: (v) => (skipRender = v),
     now: () => prevTime,
   };
 }

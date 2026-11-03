@@ -14,9 +14,8 @@
   </head>
   <body>
     <canvas id="scene" aria-hidden="true"></canvas>
-    <!-- Water that reaches the viewer: a wet-lens blur plus droplets -->
-    <div id="wet" class="wet" aria-hidden="true"></div>
-    <canvas id="drops" class="drops" aria-hidden="true"></canvas>
+    <!-- Stage names around the sand circle (positioned from the 3D scene) -->
+    <div id="labels" class="labels" aria-hidden="true"></div>
 
     <!-- Entry gate: browsers only allow sound after a user gesture -->
     <div id="gate" class="gate">
@@ -43,9 +42,16 @@
         <span class="line" data-split>Feeling better?</span>
       </h1>
       <p class="message__sub">
-        <span class="line" data-split>Good. Now let's look at</span>
-        <span class="line line--accent" data-split>what I've been building.</span>
+        <span class="line" data-split>Good. Now let me tell you</span>
+        <span class="line line--accent" data-split>a little about myself.</span>
       </p>
+    </section>
+
+    <!-- Caption for the sand art -->
+    <section id="panel" class="panel" aria-live="polite">
+      <p class="mono panel__kicker"></p>
+      <h2 class="panel__title"></h2>
+      <p class="panel__body"></p>
     </section>
 
     <button id="drink" class="btn drink" type="button" hidden>
