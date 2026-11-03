@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#030304" />
     <title>Sai Gireesh Portfolio</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -14,6 +14,9 @@
   </head>
   <body>
     <canvas id="scene" aria-hidden="true"></canvas>
+    <!-- Water that reaches the viewer: a wet-lens blur plus droplets -->
+    <div id="wet" class="wet" aria-hidden="true"></div>
+    <canvas id="drops" class="drops" aria-hidden="true"></canvas>
 
     <!-- Entry gate: browsers only allow sound after a user gesture -->
     <div id="gate" class="gate">
@@ -33,6 +36,22 @@
         <span class="line line--accent" data-split>have this glass of water.</span>
       </p>
     </section>
+
+    <section id="message-refreshed" class="message" aria-live="polite">
+      <p class="mono message__kicker">// refreshed</p>
+      <h1 class="message__title">
+        <span class="line" data-split>Feeling better?</span>
+      </h1>
+      <p class="message__sub">
+        <span class="line" data-split>Good. Now let's look at</span>
+        <span class="line line--accent" data-split>what I've been building.</span>
+      </p>
+    </section>
+
+    <button id="drink" class="btn drink" type="button" hidden>
+      <span class="drink__icon" aria-hidden="true"></span>
+      <span class="drink__label">Drink the water</span>
+    </button>
 
     <button id="mute" class="mute" type="button" aria-label="Mute sound" hidden>
       <span class="mute__icon" aria-hidden="true">♪</span>

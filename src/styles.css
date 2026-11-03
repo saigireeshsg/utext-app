@@ -12,6 +12,7 @@
 
 html, body {
   height: 100%;
+  overscroll-behavior: none;
   background: var(--bg);
   color: var(--ink);
   font-family: "Inter", system-ui, sans-serif;
@@ -20,6 +21,7 @@ html, body {
 
 #scene {
   position: fixed;
+  touch-action: none;
   inset: 0;
   width: 100%;
   height: 100%;
@@ -148,6 +150,70 @@ html, body {
   .message__kicker { transform: translateY(-12px); }
   .message__title { font-size: clamp(1.7rem, 7.5vw, 3rem); }
   .message__sub { font-size: clamp(1.05rem, 4.2vw, 1.6rem); margin-top: 0.8rem; }
+  .message {
+    top: calc(max(5vh, 20px) + env(safe-area-inset-top, 0px));
+  }
+}
+
+/* Phones held sideways: very little height, so tighten everything. */
+@media (min-aspect-ratio: 11/10) and (max-height: 500px) {
+  .message { width: min(48vw, 520px); }
+  .message__kicker { margin-bottom: 0.5rem; }
+  .message__title { font-size: clamp(1.3rem, 3.6vw, 2rem); }
+  .message__sub { font-size: clamp(0.95rem, 2.4vw, 1.25rem); margin-top: 0.6rem; }
+}
+
+/* ---------- Drink button ---------- */
+.drink {
+  position: fixed;
+  left: clamp(16px, 7vw, 120px);
+  bottom: calc(clamp(24px, 12vh, 120px) + env(safe-area-inset-bottom, 0px));
+  display: inline-flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.95rem 1.6rem 0.95rem 1.2rem;
+  letter-spacing: 0.18em;
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  opacity: 0;
+  transform: translateY(14px);
+  transition: opacity 0.6s ease, transform 0.6s cubic-bezier(0.16, 1, 0.3, 1), background 0.3s,
+    box-shadow 0.3s, border-color 0.3s;
+  z-index: 6;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+.drink.is-visible { opacity: 1; transform: none; }
+.drink:disabled { cursor: default; }
+/* little water drop */
+.drink__icon {
+  width: 12px;
+  height: 12px;
+  border-radius: 0 50% 50% 50%;
+  transform: rotate(45deg);
+  background: linear-gradient(135deg, #ffffff, var(--accent));
+  box-shadow: 0 0 12px rgba(191, 227, 255, 0.6);
+}
+
+/* ---------- Water on the screen ---------- */
+.wet {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  backdrop-filter: blur(5px) saturate(1.15);
+  -webkit-backdrop-filter: blur(5px) saturate(1.15);
+  background: radial-gradient(ellipse at 50% 60%, rgba(200, 225, 255, 0.06), rgba(0, 0, 0, 0));
+  z-index: 3;
+}
+.drops {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 4;
 }
 
 /* ---------- Mute toggle ---------- */
@@ -169,4 +235,18 @@ html, body {
 
 @media (prefers-reduced-motion: reduce) {
   .word, .message__kicker { transform: none; filter: none; transition-duration: 0.4s; }
+}
+
+/* Button placement overrides (kept after the base .drink rule so they win). */
+@media (max-aspect-ratio: 11/10) {
+  .drink {
+    left: 50%;
+    bottom: calc(28px + env(safe-area-inset-bottom, 0px));
+    transform: translate(-50%, 14px);
+    padding: 1rem 1.8rem 1rem 1.4rem;
+  }
+  .drink.is-visible { transform: translateX(-50%); }
+}
+@media (min-aspect-ratio: 11/10) and (max-height: 500px) {
+  .drink { bottom: calc(16px + env(safe-area-inset-bottom, 0px)); padding: 0.75rem 1.3rem 0.75rem 1rem; }
 }

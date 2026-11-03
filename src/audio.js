@@ -24,6 +24,8 @@ export class SoundEngine {
     if (this.ctx) return;
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
     this.ctx = ctx;
+    // Mobile Safari starts contexts suspended even inside a tap handler.
+    if (ctx.state === "suspended") ctx.resume();
     this.noise = makeNoiseBuffer(ctx);
 
     this.master = ctx.createGain();
@@ -34,6 +36,7 @@ export class SoundEngine {
     this.master.connect(comp).connect(ctx.destination);
 
     this._buildSlide();
+    this._buildPour();
     this._buildAmbience();
   }
 
@@ -96,11 +99,11 @@ export class SoundEngine {
     this._slosh();
   }
 
-  _clink() {
+  _clink(level = 0.22) {
     const ctx = this.ctx;
     const t = ctx.currentTime;
     const out = ctx.createGain();
-    out.gain.value = 0.22;
+    out.gain.value = level;
     out.connect(this.master);
     // Inharmonic partials of a struck glass.
     const base = 1320;
@@ -182,6 +185,91 @@ export class SoundEngine {
       osc.start();
       lfo.start();
     });
+  }
+
+  /* ---- Pouring stream (drinking + refilling) ---- */
+  _buildPour() {
+    const ctx = this.ctx;
+    const src = ctx.createBufferSource();
+    src.buffer = this.noise;
+    src.loop = true;
+    this.pourFilter = ctx.createBiquadFilter();
+    this.pourFilter.type = "bandpass";
+    this.pourFilter.Q.value = 2.5;
+    this.pourFilter.frequency.value = 900;
+    this.pourGain = ctx.createGain();
+    this.pourGain.gain.value = 0;
+    src.connect(this.pourFilter).connect(this.pourGain).connect(this.master);
+    src.start();
+  }
+
+  /** rate 0..1; pitch 0..1 rises as a vessel fills (that's how you hear a glass filling) */
+  setPour(rate, pitch = 0.5) {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    const gurgle = 0.75 + Math.random() * 0.5;
+    this.pourGain.gain.setTargetAtTime(rate * 0.32 * gurgle, t, 0.03);
+    this.pourFilter.frequency.setTargetAtTime(500 + pitch * 1400 + Math.random() * 250, t, 0.02);
+  }
+
+  /** One swallow: a soft low "glk". */
+  gulp() {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    osc.type = "sine";
+    const f = 190 + Math.random() * 40;
+    osc.frequency.setValueAtTime(f, t);
+    osc.frequency.exponentialRampToValueAtTime(f * 0.45, t + 0.14);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.45, t + 0.015);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.2);
+    const lp = ctx.createBiquadFilter();
+    lp.type = "lowpass";
+    lp.frequency.value = 700;
+    osc.connect(lp).connect(g).connect(this.master);
+    osc.start(t);
+    osc.stop(t + 0.22);
+  }
+
+  /** A droplet landing on the screen. Throttled so a burst doesn't clip. */
+  drip() {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime;
+    if (this._lastDrip && t - this._lastDrip < 0.04) return;
+    this._lastDrip = t;
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    const f = 700 + Math.random() * 900;
+    osc.frequency.setValueAtTime(f, t);
+    osc.frequency.exponentialRampToValueAtTime(f * 2.4, t + 0.05);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.06, t + 0.006);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.08);
+    osc.connect(g).connect(this.master);
+    osc.start(t);
+    osc.stop(t + 0.09);
+  }
+
+  /** Glass set back down on the table. */
+  setDown() {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime;
+    const thud = ctx.createOscillator();
+    const tg = ctx.createGain();
+    thud.frequency.setValueAtTime(140, t);
+    thud.frequency.exponentialRampToValueAtTime(60, t + 0.1);
+    tg.gain.setValueAtTime(0.0001, t);
+    tg.gain.exponentialRampToValueAtTime(0.35, t + 0.005);
+    tg.gain.exponentialRampToValueAtTime(0.0001, t + 0.15);
+    thud.connect(tg).connect(this.master);
+    thud.start(t);
+    thud.stop(t + 0.16);
+    this._clink(0.1);
   }
 
   /* Heavy stage-light switch: a low thunk plus a click. */

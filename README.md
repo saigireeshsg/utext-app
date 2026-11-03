@@ -12,12 +12,27 @@ An immersive portfolio built with [three.js](https://threejs.org) + [Vite](https
    > You have been screening a lot of portfolios so far.
    > You deserve a break — have this glass of water.
 
+6. **Drink the water.** A button appears. Clicking it lifts the glass toward the viewer and tips it toward
+   the screen. The water spills over the lip with gulping sounds and splashes onto the "lens": the screen goes
+   briefly blurry and droplets bead up and run down. The empty glass is set back down, and the message changes to
+   *"Feeling better? Good. Now let's look at what I've been building."*
+7. **Refill the glass** pours a stream back in (you hear the pitch rise as it fills), and the loop starts again.
+
+### Mobile
+- On portrait screens the message sits above the glass and the button is centred at the bottom.
+  Landscape phones get a tighter type scale.
+- The camera widens its view on narrow screens so the glass always fits.
+- Rendering is lighter on touch devices (lower pixel ratio, smaller reflection, fewer dust motes).
+- Every fixed control clears the notch and home bar (safe-area insets).
+
 ### Files
 - `src/glass.js`: the glass, thick base, water and bubbles. The water surface deforms every frame.
 - `src/audio.js`: all sounds are synthesized live with the Web Audio API (light switch, slide friction,
   clink, slosh, whoosh, room tone). There are no audio files.
 - `src/main.js`: the studio lighting environment, table and reflection, spotlight, timeline and slosh physics.
-- `index.html` / `src/styles.css`: the entry gate and the message (Space Grotesk + Inter).
+- `index.html` / `src/styles.css`: the entry gate, messages, the drink button and the wet-screen layers.
+
+Add `?debug` to the URL to get `window.__portfolio` in the console, including `setTime(t)` for stepping animations frame by frame.
 
 ## Run locally
 ```bash

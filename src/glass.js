@@ -55,7 +55,7 @@ function waterProfile() {
 }
 
 // Dark-field look: bright edges where the surface turns away from the viewer.
-function fresnelMaterial(strength, power) {
+function fresnelMaterial(strength, power, side = THREE.FrontSide) {
   return new THREE.ShaderMaterial({
     uniforms: { uStrength: { value: strength }, uPower: { value: power } },
     vertexShader: /* glsl */ `
@@ -76,7 +76,7 @@ function fresnelMaterial(strength, power) {
     transparent: true,
     depthWrite: false,
     blending: THREE.AdditiveBlending,
-    side: THREE.DoubleSide,
+    side,
   });
 }
 
@@ -107,7 +107,7 @@ export function createGlassOfWater() {
       roughness: 0.03,
       metalness: 0,
       transparent: true,
-      opacity: 0.12,
+      opacity: 0.08,
       clearcoat: 1,
       clearcoatRoughness: 0.02,
       envMapIntensity: 4,
@@ -116,7 +116,7 @@ export function createGlassOfWater() {
     })
   );
   shell.renderOrder = 3;
-  const edges = new THREE.Mesh(glassGeo, fresnelMaterial(1.1, 2.6));
+  const edges = new THREE.Mesh(glassGeo, fresnelMaterial(0.75, 3.2));
   edges.renderOrder = 4;
 
   // --- Thick base: solid refracting glass that catches the spotlight ---
@@ -201,28 +201,41 @@ export function createGlassOfWater() {
 
   group.add(shadow, caustic, base, water, waterEdges, bubbles, shell, edges);
 
-  function update(tiltX, tiltZ, time, ripple) {
+  /**
+   * @param tiltX, tiltZ  surface slope in the glass's local space
+   * @param fill          0..1 how full the glass is (1 = resting level)
+   */
+  function update(tiltX, tiltZ, time, ripple, fill = 1) {
+    const empty = fill < 0.015;
+    water.visible = waterEdges.visible = bubbles.visible = !empty;
+    caustic.visible = !empty;
+    if (empty) return;
     const a = pos.array;
+    const MIN_Y = BASE + 0.006;
+    const MAX_Y = HEIGHT - 0.012;
     for (let i = 0; i < a.length; i += 3) {
       const y = rest[i + 1];
       if (y < BASE + 0.15) continue;
       const x = rest[i];
       const z = rest[i + 2];
       const h = (y - BASE) / (WATER_LEVEL - BASE);
+      // squash the column down as the glass empties
+      const yFill = BASE + 0.15 + (y - BASE - 0.15) * fill;
       const r = Math.hypot(x, z);
       const wave =
         y >= WATER_LEVEL - 1e-4
           ? ripple * 0.03 * Math.sin(r * 14 - time * 8) +
             0.004 * Math.sin(time * 1.3 + x * 4) * Math.cos(time * 1.1 + z * 4)
           : 0;
-      a[i + 1] = y + (tiltX * x + tiltZ * z + wave) * h * h;
+      const ny = yFill + (tiltX * x + tiltZ * z + wave) * h * h;
+      a[i + 1] = Math.min(Math.max(ny, MIN_Y), MAX_Y);
     }
     pos.needsUpdate = true;
     waterGeo.computeVertexNormals();
 
     for (let i = 0; i < BUBBLES; i++) {
       const s = bSeed[i];
-      const span = WATER_LEVEL - BASE - 0.25;
+      const span = (WATER_LEVEL - BASE - 0.25) * fill;
       const y = BASE + 0.2 + ((s.off + time * s.speed) % 1) * span;
       bPos[i * 3] = s.x + Math.sin(time * 2 + i) * 0.01;
       bPos[i * 3 + 1] = y;
@@ -233,5 +246,5 @@ export function createGlassOfWater() {
     caustic.material.opacity = 0.26 + 0.05 * Math.sin(time * 2.1) + 0.2 * ripple;
   }
 
-  return { group, update, height: HEIGHT };
+  return { group, update, HEIGHT, R_TOP, BASE, WATER_LEVEL };
 }
