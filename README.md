@@ -26,15 +26,21 @@ An immersive portfolio built with [three.js](https://threejs.org) + [Vite](https
       connect. A small loop marks the trip across India with Mom.
    4. **Product.** A steady climb through another fragment.
    5. **Zero to one.** The steepest climb, ending in a small mound for the first car in the family, a Polo.
-   6. **Finale.** Every grain lifts off the table and flows together into one shape, a voice-wave "flow" mark,
-      with the closing caption about finding your rhythm.
+   6. **Finale: bringing it back together.** Starting from the founder years (SIYA, Unlearn), each phase's sand
+      lifts off the table and flies into one bar of the Wispr Flow logo (phase 05 first, 01 last). Phase 01
+      becomes the tall left bar and 05 the tall right bar. Each bar fills in as its grains land, and the closing
+      caption is about finding your rhythm.
+
+   Each phase has a callout: a dot on its line with a thin pointer to its label. Callouts flip to the other side
+   if they would run off the screen.
 
    Each caption stays up long enough to read (about 200 words a minute). On phones the camera keeps the graph
    upright, zooms in and pans along with the pour, then zooms out for the finale.
 
 ### Editing the story
 All the sand-art text is in `src/story.js`: each phase (label, title, caption), the fragment labels, the trip,
-the Polo and the finale. Where each phase is poured (the shape of the graph) is in `src/sandStory.js`.
+the Polo, the "bringing it together" caption and the finale. Where each phase is poured (the shape of the
+graph), the callout positions and the logo geometry are in `src/sandStory.js`.
 
 ### Mobile
 - On portrait screens the message sits above the glass and the button is centred at the bottom.

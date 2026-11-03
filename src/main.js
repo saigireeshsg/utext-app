@@ -319,13 +319,31 @@ function showPanel({ kicker, title, body }) {
   } else fill();
 }
 
-// Labels on the drawing (phase names, the scattered bits, the trip, the Polo).
+function setCalloutSide(el, dx, dy) {
+  el.style.setProperty("--angle", `${Math.atan2(dy, dx)}rad`);
+  el.style.setProperty("--dx", `${dx}px`);
+  el.classList.toggle("is-left", dx < 0);
+  el.classList.toggle("is-right", dx >= 0);
+}
+
+// Labels on the drawing. Phase labels are callouts: a dot on their line and a
+// thin pointer out to the text beside it.
 const sandLabels = sandStory.labels.map((l) => {
   const el = document.createElement("div");
+  const pointer = l.kind.startsWith("pointer");
   el.className = `stage-label stage-label--${l.kind}`;
-  el.textContent = l.text;
+  if (pointer) {
+    const [dx, dy] = l.offset;
+    el.style.setProperty("--len", `${Math.hypot(dx, dy)}px`);
+    el.style.setProperty("--dy", `${dy}px`);
+    setCalloutSide(el, dx, dy);
+    el.innerHTML = '<span class="callout__dot"></span><span class="callout__line"></span><span class="callout__text"></span>';
+    el.querySelector(".callout__text").textContent = l.text;
+  } else {
+    el.textContent = l.text;
+  }
   labelsEl.append(el);
-  return { el, anchor: new THREE.Vector3(l.at[0], 0, l.at[1]) };
+  return { el, pointer, offset: l.offset, flipped: false, textW: 0, anchor: new THREE.Vector3(l.at[0], 0, l.at[1]) };
 });
 
 // idle → lights → sliding → full → drinking → empty → toSand → sand → done
@@ -448,7 +466,7 @@ const SAND_RATE = isTouch ? 300 : 380; // falling grain-clusters per second
 const SAND_SPEED = reduceMotion ? 2.5 : 1;
 const sandRun = {
   steps: [], i: 0, stroke: null, d: 0, wait: 0,
-  captionAt: 0, readFor: 0, x: -3.6, z: 1.6, flow: 0, weight: 1, finaleAt: -1,
+  captionAt: 0, readFor: 0, x: -3.6, z: 1.6, flow: 0, weight: 1, tag: 0, finaleAt: -1, reforming: false,
 };
 
 function prepareStroke(pts) {
@@ -494,6 +512,7 @@ function runSand(dt, time) {
       [r.x, r.z] = st.mound;
       r.flow = 0.7;
       r.weight = 2.4;
+      r.tag = st.tag ?? r.tag;
       r.wait += dt;
       if (r.wait < st.time) return;
       r.wait = 0;
@@ -506,21 +525,27 @@ function runSand(dt, time) {
       r.d = Math.min(r.d + st.speed * SAND_SPEED * dt, r.stroke.total);
       [r.x, r.z] = strokeAt(r.stroke, r.d);
       r.weight = st.weight;
+      r.tag = st.tag ?? r.tag;
       r.flow = 1;
       if (r.d < r.stroke.total) return;
       r.stroke = null;
       r.i++;
     } else if (st.finale) {
-      // Every piece lifts off the table and comes together.
+      // Every piece lifts off the table and comes together into the logo.
       sandLabels.forEach((l) => l.el.classList.remove("is-visible"));
-      panel.classList.remove("is-visible");
-      sand.startReform(st.finale);
+      sand.startReform(st.finale, st.order);
       sound.whoosh();
       r.finaleAt = time;
+      r.reforming = true;
       r.i++;
       return;
+    } else if (st.waitFinale) {
+      if (r.reforming) return;
+      r.i++;
     }
   }
+  // Script finished.
+  if (phase === "sand") phase = "done";
 }
 
 /* ------------------------------------------------------------------ */
@@ -686,30 +711,41 @@ function tick() {
   if (phase === "sand") {
     runSand(dt, time);
     sandRate = sandRun.flow;
-    sand.setPour(sandRun.x, sandRun.z, SAND_RATE * sandRun.flow, sandRun.weight);
-    if (sandRun.finaleAt >= 0) {
+    sand.setPour(sandRun.x, sandRun.z, SAND_RATE * sandRun.flow, sandRun.weight, sandRun.tag);
+    if (sandRun.reforming) {
+      // the rush of sand in the air swells and settles
       const ft = time - sandRun.finaleAt;
-      sandRate = ft < 3.6 ? 0.55 * Math.sin(Math.min(ft / 3.6, 1) * Math.PI) + 0.1 : 0;
-      if (ft > 3.4 && !panel.dataset.finale) {
-        panel.dataset.finale = "1";
-        showPanel(story.finale);
-      }
+      sandRate = 0.12 + 0.5 * Math.sin(Math.min(ft / 5, 1) * Math.PI);
     }
+  } else {
+    sand.setPour(0, 0, 0);
   }
   const landed = sand.update(dt);
   const reforming = sand.updateReform(dt);
-  if (phase === "sand" && sandRun.finaleAt >= 0 && !reforming && time - sandRun.finaleAt > 4) phase = "done";
-  if (landed || reforming || phase === "done") {
+  if (sandRun.reforming && !reforming) sandRun.reforming = false;
+  if (landed || reforming) {
     // Big textures are expensive to re-upload; phones refresh the sand every other frame.
     if (!isTouch || frameNo % 2 === 0) sand.flush();
-  }
+  } else if (phase === "done") sand.flush();
   sound.setSand(phase === "sand" ? sandRate : 0);
 
   // Labels follow their spot on the table.
   if (overheadMode) {
     for (const l of sandLabels) {
       tmp.copy(l.anchor).project(camera);
-      l.el.style.transform = `translate(${((tmp.x + 1) / 2) * window.innerWidth}px, ${((1 - tmp.y) / 2) * window.innerHeight}px) translate(-50%, -50%)`;
+      const sx = ((tmp.x + 1) / 2) * window.innerWidth;
+      const sy = ((1 - tmp.y) / 2) * window.innerHeight;
+      l.el.style.transform = l.pointer ? `translate(${sx}px, ${sy}px)` : `translate(${sx}px, ${sy}px) translate(-50%, -50%)`;
+      if (l.pointer) {
+        // Flip a callout to the other side of its dot if its text would run off-screen.
+        const [dx, dy] = l.offset;
+        l.textW = l.textW || l.el.querySelector(".callout__text").offsetWidth;
+        const off = dx > 0 ? sx + dx + l.textW + 12 > window.innerWidth : sx + dx - l.textW - 12 < 0;
+        if (off !== l.flipped) {
+          l.flipped = off;
+          setCalloutSide(l.el, off ? -dx : dx, dy);
+        }
+      }
     }
   }
 

@@ -48,26 +48,26 @@ function loop([cx, cz], r, startDeg, n = 28) {
   return pts;
 }
 
-/** The final "flow" mark: three strands of a voice waveform. */
-export function flowMark(center = [-0.1, -0.1], width = 7, height = 2.1) {
-  const [cx, cz] = center;
-  const strands = [
-    { amp: 1, phase: 0, cycles: 3.2 },
-    { amp: 0.62, phase: 1.1, cycles: 3.2 },
-    { amp: 0.32, phase: 2.2, cycles: 3.2 },
+/**
+ * The Wispr Flow logo: five rounded vertical bars. Measured from the logo image
+ * (outer bars 243 px tall, bars 53 px apart and 35 px wide) and scaled onto the table.
+ * Returns capsules: { x, z0, z1, r } (z0 = top of the bar, z1 = bottom).
+ */
+export function wisprLogo(center = [0, -0.05], height = 4.3) {
+  const s = height / 243; // world units per logo pixel
+  const bars = [
+    { x: 172, top: 157, bottom: 400 },
+    { x: 225, top: 268, bottom: 376 },
+    { x: 278, top: 197, bottom: 358 },
+    { x: 331, top: 268, bottom: 376 },
+    { x: 384, top: 157, bottom: 400 },
   ];
-  return strands.map(({ amp, phase, cycles }) => {
-    const pts = [];
-    const n = 220;
-    for (let i = 0; i <= n; i++) {
-      const u = i / n;
-      const env = Math.pow(Math.sin(Math.PI * u), 1.6); // swells in the middle, like a spoken word
-      const x = cx - width / 2 + width * u;
-      const z = cz - (height / 2) * amp * env * Math.sin(u * cycles * Math.PI * 2 + phase);
-      pts.push([x, z]);
-    }
-    return pts;
-  });
+  return bars.map((b) => ({
+    x: center[0] + (b.x - 278) * s,
+    z0: center[1] + (b.top - 278.5) * s,
+    z1: center[1] + (b.bottom - 278.5) * s,
+    r: 17.5 * s,
+  }));
 }
 
 export function buildSandStory(story) {
@@ -97,37 +97,38 @@ export function buildSandStory(story) {
   ];
 
   const labels = [];
-  const label = (text, at, kind = "phase") => {
-    labels.push({ text, at, kind });
+  // `at` is where the label sits; with `pointer`, `at` is the spot on the line and
+  // `offset` (screen px) is where the label text sits, joined by a thin pointer.
+  const label = (text, at, kind = "phase", offset = null) => {
+    labels.push({ text, at, kind, offset });
     return labels.length - 1;
   };
 
   const L = {
-    roots: label(story.phases[0].label, [-3.05, 0.15]),
-    bits: label(story.phases[1].label, [-0.35, 2.4]),
-    edtech: label(story.phases[2].label, [-0.55, 0.3]),
-    product: label(story.phases[3].label, [0.95, -0.85]),
-    zero: label(story.phases[4].label, [2.2, -2.05]),
-    trip: label(story.trip, [0.45, 0.78], "small"),
-    polo: label(story.polo.label, [2.7, -1.72], "small"),
+    roots: label(`01 · ${story.phases[0].label}`, [-2.7, 0.61], "pointer", [-64, -46]),
+    bits: label(`02 · ${story.phases[1].label}`, [-1.33, 0.21], "pointer", [-46, 56]),
+    edtech: label(`03 · ${story.phases[2].label}`, [-0.38, 0.72], "pointer", [24, 84]),
+    product: label(`04 · ${story.phases[3].label}`, [1.32, -0.36], "pointer", [-70, -48]),
+    zero: label(`05 · ${story.phases[4].label}`, [2.4, -1.37], "pointer", [58, 52]),
+    trip: label(story.trip, [0.49, 0.37], "pointer-small", [52, 44]),
+    polo: label(story.polo.label, [3.25, -2.35], "pointer-small", [-78, -26]),
   };
   const bitLabels = frags
     .filter((f) => f.bit !== undefined)
     .map((f) => label(story.bits[f.bit], [f.c[0], f.c[1] + 0.27], "small"));
-
   const steps = [];
   const W = { strong: 2.0, normal: 1.0, thin: 0.55 };
 
   // 01 · a strong, long line
   steps.push({ caption: story.phases[0] }, { label: L.roots });
-  steps.push({ stroke: [P1a, P1b], speed: 0.85, weight: W.strong });
+  steps.push({ stroke: [P1a, P1b], speed: 0.85, weight: W.strong, tag: 0 });
   steps.push({ read: true });
 
   // 02 · the graph drops, shakily, then breaks into fragments everywhere
   steps.push({ caption: story.phases[1] }, { label: L.bits });
-  steps.push({ stroke: shaky(P1b, P2b, 26, 0.05, 7), speed: 0.7, weight: W.normal });
+  steps.push({ stroke: shaky(P1b, P2b, 26, 0.05, 7), speed: 0.7, weight: W.normal, tag: 1 });
   frags.forEach((f, i) => {
-    steps.push({ stroke: segment(f.c, f.a, f.len), speed: 1.1, weight: W.thin, jump: true });
+    steps.push({ stroke: segment(f.c, f.a, f.len), speed: 1.1, weight: W.thin, tag: 1 });
     if (f.bit !== undefined) steps.push({ label: bitLabels[f.bit] });
     if (i % 3 === 2) steps.push({ wait: 0.15 });
   });
@@ -140,28 +141,32 @@ export function buildSandStory(story) {
     stroke: [P2b, [-0.55 - 0.16, 0.8 + 0.04], [-0.05, 0.55], loopStart],
     speed: 0.8,
     weight: W.normal,
-    jump: true,
+    tag: 2,
   });
-  steps.push({ stroke: loop([loopC[0], loopC[1] - 0.05], 0.2, 160), speed: 0.7, weight: W.normal });
+  steps.push({ stroke: loop([loopC[0], loopC[1] - 0.05], 0.2, 160), speed: 0.7, weight: W.normal, tag: 2 });
   steps.push({ label: L.trip });
-  steps.push({ stroke: [loopStart, P3b], speed: 0.8, weight: W.normal });
+  steps.push({ stroke: [loopStart, P3b], speed: 0.8, weight: W.normal, tag: 2 });
   steps.push({ read: true });
 
   // 04 · steady climb through another piece
   steps.push({ caption: story.phases[3] }, { label: L.product });
-  steps.push({ stroke: [P3b, [1.32, -0.36], P4b], speed: 0.8, weight: W.normal * 1.15 });
+  steps.push({ stroke: [P3b, [1.32, -0.36], P4b], speed: 0.8, weight: W.normal * 1.15, tag: 3 });
   steps.push({ read: true });
 
   // 05 · steepest climb, ending in a mound for the Polo
   steps.push({ caption: story.phases[4] }, { label: L.zero });
-  steps.push({ stroke: [P4b, [2.55, -1.5], P5b], speed: 0.8, weight: W.normal * 1.3 });
+  steps.push({ stroke: [P4b, [2.55, -1.5], P5b], speed: 0.8, weight: W.normal * 1.3, tag: 4 });
   steps.push({ read: true });
   steps.push({ caption: story.polo }, { label: L.polo });
-  steps.push({ mound: POLO, time: 1.4 });
+  steps.push({ mound: POLO, time: 1.4, tag: 4 });
   steps.push({ read: true });
 
-  // Finale: everything lifts and flows into one shape.
-  steps.push({ finale: flowMark() });
+  // Finale: starting from the founder years, each phase's sand lifts and flows
+  // into one bar of the Wispr Flow logo (phase 01 = left bar ... 05 = right bar).
+  steps.push({ caption: story.together });
+  steps.push({ finale: wisprLogo(), order: [4, 3, 2, 1, 0] });
+  steps.push({ waitFinale: true }, { read: true });
+  steps.push({ caption: story.finale });
 
   return {
     steps,

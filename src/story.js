@@ -49,7 +49,14 @@ export const story = {
     body: "A Polo. My mom proudly brings it up at every family function.",
   },
 
-  // Every grain lifts off the table and comes together into one shape.
+  // While every phase's sand lifts off the table and comes together (starting from SIYA).
+  together: {
+    kicker: "// bringing it back together",
+    title: "SIYA needed every piece at once",
+    body: "Founding SIYA and co-leading Unlearn pulled everything back in: the teaching, the psychology, the code, the product sense, the communities. Nothing I had tried was wasted.",
+  },
+
+  // Once the pieces have formed the Wispr Flow logo.
   finale: {
     kicker: "// finding the rhythm",
     title: "It was never about doing everything",
