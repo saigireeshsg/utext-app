@@ -8,6 +8,8 @@
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
+:root { color-scheme: dark; }
+
 html, body {
   height: 100%;
   background: var(--bg);
@@ -151,8 +153,8 @@ html, body {
 /* ---------- Mute toggle ---------- */
 .mute {
   position: fixed;
-  right: 16px;
-  bottom: 16px;
+  right: calc(16px + env(safe-area-inset-right, 0px));
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
   width: 44px;
   height: 44px;
   border-radius: 50%;
