@@ -37,7 +37,6 @@ export class SoundEngine {
 
     this._buildSlide();
     this._buildPour();
-    this._buildSand();
     this._buildAmbience();
   }
 
@@ -204,34 +203,6 @@ export class SoundEngine {
     src.start();
   }
 
-  /* ---- Fine sand running out of a funnel: a soft, grainy hiss ---- */
-  _buildSand() {
-    const ctx = this.ctx;
-    const src = ctx.createBufferSource();
-    src.buffer = this.noise;
-    src.loop = true;
-    const hp = ctx.createBiquadFilter();
-    hp.type = "highpass";
-    hp.frequency.value = 1800;
-    const peak = ctx.createBiquadFilter();
-    peak.type = "peaking";
-    peak.frequency.value = 5200;
-    peak.gain.value = 6;
-    this.sandGain = ctx.createGain();
-    this.sandGain.gain.value = 0;
-    src.connect(hp).connect(peak).connect(this.sandGain).connect(this.master);
-    src.start();
-  }
-
-  /** rate 0..1 */
-  setSand(rate) {
-    if (!this.ctx) return;
-    const t = this.ctx.currentTime;
-    // random flutter = individual grains ticking
-    const grain = 0.7 + Math.random() * 0.6;
-    this.sandGain.gain.setTargetAtTime(rate * 0.16 * grain, t, 0.02);
-  }
-
   /** rate 0..1; pitch 0..1 rises as a vessel fills (that's how you hear a glass filling) */
   setPour(rate, pitch = 0.5) {
     if (!this.ctx) return;
@@ -261,6 +232,94 @@ export class SoundEngine {
     osc.connect(lp).connect(g).connect(this.master);
     osc.start(t);
     osc.stop(t + 0.22);
+  }
+
+  /* ---- Cards ---- */
+
+  /** Finger catching the edge of a card. */
+  cardTick() {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime;
+    const src = ctx.createBufferSource();
+    src.buffer = this.noise;
+    const bp = ctx.createBiquadFilter();
+    bp.type = "bandpass";
+    bp.frequency.value = 3200;
+    bp.Q.value = 3;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.25, t + 0.004);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
+    src.connect(bp).connect(g).connect(this.master);
+    src.start(t);
+    src.stop(t + 0.06);
+  }
+
+  /** A card sliding out of (or back past) its sleeve: a papery "shhk". */
+  cardSlide(level = 1) {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime;
+    const src = ctx.createBufferSource();
+    src.buffer = this.noise;
+    const bp = ctx.createBiquadFilter();
+    bp.type = "bandpass";
+    bp.Q.value = 1.4;
+    bp.frequency.setValueAtTime(900, t);
+    bp.frequency.exponentialRampToValueAtTime(3800, t + 0.28);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.32 * level, t + 0.06);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.42);
+    src.connect(bp).connect(g).connect(this.master);
+    src.start(t);
+    src.stop(t + 0.45);
+  }
+
+  /** Card settling into place: a soft papery tap. */
+  cardPlace() {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    osc.frequency.setValueAtTime(220, t);
+    osc.frequency.exponentialRampToValueAtTime(90, t + 0.08);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.18, t + 0.005);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.12);
+    osc.connect(g).connect(this.master);
+    osc.start(t);
+    osc.stop(t + 0.13);
+  }
+
+  /** Warm, slowly blooming chord for when the cards come together. */
+  chord() {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime;
+    const out = ctx.createGain();
+    out.gain.setValueAtTime(0.0001, t);
+    out.gain.exponentialRampToValueAtTime(0.16, t + 0.8);
+    out.gain.exponentialRampToValueAtTime(0.0001, t + 5.5);
+    const lp = ctx.createBiquadFilter();
+    lp.type = "lowpass";
+    lp.frequency.value = 1800;
+    out.connect(lp).connect(this.master);
+    // Dmaj9-ish, spread over two octaves, notes entering one by one
+    [146.83, 220, 293.66, 369.99, 440, 659.25].forEach((f, i) => {
+      const osc = ctx.createOscillator();
+      osc.type = i % 2 ? "sine" : "triangle";
+      osc.frequency.value = f;
+      const g = ctx.createGain();
+      const s = t + i * 0.12;
+      g.gain.setValueAtTime(0.0001, s);
+      g.gain.exponentialRampToValueAtTime(0.3 / (1 + i * 0.3), s + 0.4);
+      osc.connect(g).connect(out);
+      osc.start(s);
+      osc.stop(t + 5.6);
+    });
   }
 
   /** Glass set back down on the table. */

@@ -3,8 +3,7 @@ import { Reflector } from "three/addons/objects/Reflector.js";
 import { createGlassOfWater } from "./glass.js";
 import { SoundEngine } from "./audio.js";
 import { createPourStream } from "./pourStream.js";
-import { createSand } from "./sand.js";
-import { buildSandStory } from "./sandStory.js";
+import { createChapters } from "./chapters.js";
 import { story } from "./story.js";
 import "./styles.css";
 
@@ -223,22 +222,43 @@ const SLIDE_SECONDS = 4.0;
 let restX = 0; // set by layout(): glass sits right of centre on wide screens
 let lookY = LOOK.y;
 const restPos = () => new THREE.Vector3(restX, glass.HEIGHT, Z_END + glass.R_TOP);
-// Where the empty glass is put while the sand art is drawn (the empty far-left corner).
-const ASIDE = new THREE.Vector3(-3.25, glass.HEIGHT, -2.55 + glass.R_TOP);
+// Where the empty glass is put while the chapters are read: the near-left corner, just out of shot.
+const ASIDE = new THREE.Vector3(-4.05, glass.HEIGHT, 2.6 + glass.R_TOP);
 rig.position.set(0, glass.HEIGHT, Z_FAR);
 
 const pour = createPourStream();
 scene.add(pour.group);
 
 /* ------------------------------------------------------------------ */
-/* Sand art                                                            */
+/* Know about me: five boxes, one card per chapter                     */
 /* ------------------------------------------------------------------ */
-const sand = createSand({ size: 7.8, center: [-0.2, -0.35], resolution: isTouch ? 1024 : 1536 });
-scene.add(sand.group);
-const sandStory = buildSandStory(story);
-// Region the overhead camera must frame: the drawing, its labels, and the glass set aside.
-const SAND_BOUNDS = sandStory.bounds;
-const SAND_SPOT = { x: 0.15, z: -0.5, angle: 0.5 };
+const chapterEl = document.getElementById("chapter");
+const chapters = createChapters({
+  chapters: story.phases,
+  canvas,
+  onPullStart: () => sound.cardTick(),
+  onOpen: (i) => {
+    sound.cardSlide();
+    // let the card reach the viewer before the readable version fades in
+    setTimeout(() => showChapter(i), reduceMotion ? 0 : 650);
+  },
+  onClose: () => {
+    sound.cardSlide(0.6);
+    setTimeout(() => sound.cardPlace(), 700);
+    updateProgress();
+  },
+  onAllOut: () => {
+    progressEl.classList.remove("is-visible");
+    setTimeout(() => showPanel(story.together), 400);
+    setTimeout(() => sound.chord(), 2400);
+    setTimeout(() => showPanel(story.finale), reduceMotion ? 3000 : 11000);
+  },
+});
+scene.add(chapters.group);
+// Repaint the printed cards once the web fonts are in.
+document.fonts?.ready.then(() => chapters.refreshTextures());
+// A wider spotlight that covers the whole row.
+const CARDS_SPOT = { x: 0, z: 0.3, angle: 0.36 };
 
 /* ------------------------------------------------------------------ */
 /* Spotlight placement                                                 */
@@ -264,7 +284,6 @@ const messages = {
 const actionBtn = document.getElementById("drink");
 const muteBtn = document.getElementById("mute");
 const panel = document.getElementById("panel");
-const labelsEl = document.getElementById("labels");
 const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 // Split message lines into words so each one can slide in on its own.
@@ -302,7 +321,7 @@ function hideButton() {
   hideTimer = setTimeout(() => (actionBtn.hidden = true), 400);
 }
 
-// Caption panel for the sand art.
+// Caption panel (bottom of the screen) for the closing lines.
 let panelTimer = 0;
 function showPanel({ kicker, title, body }) {
   clearTimeout(panelTimer);
@@ -319,34 +338,71 @@ function showPanel({ kicker, title, body }) {
   } else fill();
 }
 
-function setCalloutSide(el, dx, dy) {
-  el.style.setProperty("--angle", `${Math.atan2(dy, dx)}rad`);
-  el.style.setProperty("--dx", `${dx}px`);
-  el.classList.toggle("is-left", dx < 0);
-  el.classList.toggle("is-right", dx >= 0);
+// The readable chapter card (DOM), shown when a card reaches the viewer.
+const progressEl = document.getElementById("progress");
+const chapterNav = document.getElementById("chapter-nav");
+function showChapter(i) {
+  const ch = story.phases[i];
+  chapterEl.querySelector(".chapter__num").textContent = String(i + 1).padStart(2, "0");
+  chapterEl.querySelector(".chapter__kicker").textContent = ch.kicker;
+  chapterEl.querySelector(".chapter__title").textContent = ch.title;
+  chapterEl.querySelector(".chapter__body").textContent = ch.body;
+  const chips = chapterEl.querySelector(".chapter__chips");
+  chips.replaceChildren(
+    ...(ch.chips || []).map((c) => Object.assign(document.createElement("li"), { textContent: c }))
+  );
+  chips.hidden = !ch.chips;
+  const note = chapterEl.querySelector(".chapter__note");
+  note.textContent = ch.note || "";
+  note.hidden = !ch.note;
+  const left = story.phases.length - chapters.outCount() - 1;
+  chapterEl.querySelector(".chapter__next").textContent = left > 0 ? "Next chapter" : "Bring it together";
+  chapterEl.hidden = false;
+  requestAnimationFrame(() => chapterEl.classList.add("is-visible"));
+  chapterEl.querySelector(".chapter__next").focus({ preventScroll: true });
 }
-
-// Labels on the drawing. Phase labels are callouts: a dot on their line and a
-// thin pointer out to the text beside it.
-const sandLabels = sandStory.labels.map((l) => {
-  const el = document.createElement("div");
-  const pointer = l.kind.startsWith("pointer");
-  el.className = `stage-label stage-label--${l.kind}`;
-  if (pointer) {
-    const [dx, dy] = l.offset;
-    el.style.setProperty("--len", `${Math.hypot(dx, dy)}px`);
-    el.style.setProperty("--dy", `${dy}px`);
-    setCalloutSide(el, dx, dy);
-    el.innerHTML = '<span class="callout__dot"></span><span class="callout__line"></span><span class="callout__text"></span>';
-    el.querySelector(".callout__text").textContent = l.text;
-  } else {
-    el.textContent = l.text;
-  }
-  labelsEl.append(el);
-  return { el, pointer, offset: l.offset, flipped: false, textW: 0, anchor: new THREE.Vector3(l.at[0], 0, l.at[1]) };
+function hideChapter(then) {
+  chapterEl.classList.remove("is-visible");
+  setTimeout(() => {
+    chapterEl.hidden = true;
+    then?.();
+  }, 250);
+}
+function closeChapter(openNext = false) {
+  if (chapters.current === -1 || chapterEl.hidden) return;
+  const next = openNext ? chapters.nextUnread() : -1;
+  hideChapter(() => {
+    chapters.close();
+    if (next >= 0) setTimeout(() => chapters.open(next), 900);
+  });
+}
+chapterEl.querySelector(".chapter__close").addEventListener("click", () => closeChapter(false));
+chapterEl.querySelector(".chapter__next").addEventListener("click", () => closeChapter(true));
+chapterEl.addEventListener("click", (e) => {
+  if (e.target === chapterEl) closeChapter(false); // click outside the card
+});
+window.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") closeChapter(false);
 });
 
-// idle → lights → sliding → full → drinking → empty → toSand → sand → done
+function updateProgress() {
+  const read = chapters.outCount();
+  progressEl.querySelectorAll(".progress__dot").forEach((d, k) => {
+    d.classList.toggle("is-read", k < read);
+  });
+  progressEl.querySelector(".progress__text").textContent =
+    read === 0 ? "Pull a card out of a box to read that chapter" : `${read} of ${story.phases.length} chapters read`;
+}
+// Keyboard and screen-reader access to the cards.
+story.phases.forEach((ch, i) => {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.textContent = `Read chapter ${i + 1}: ${ch.label}`;
+  b.addEventListener("click", () => chapters.open(i));
+  chapterNav.append(b);
+});
+
+// idle → lights → sliding → full → drinking → empty → toCards → cards
 let phase = "idle";
 let phaseStart = 0;
 let lightLevel = 0;
@@ -366,7 +422,7 @@ actionBtn.addEventListener("click", () => {
     phase = "drinking";
     drink.from.copy(rig.position);
   } else if (phase === "empty") {
-    phase = "toSand";
+    phase = "toCards";
     aside.from.copy(rig.position);
   } else return;
   phaseStart = debugTime ?? clock.getElapsedTime();
@@ -432,121 +488,27 @@ function maxFillAt(theta) {
 }
 
 /**
- * Overhead framing for the sand art, leaving room for the caption.
- * Wide screens fit the whole drawing. Phones keep the graph upright (so "down"
- * still means down) and instead zoom in and pan along with the pour, then zoom
- * out for the finale.
+ * Camera for the boxes: front-on and a little above, fitted so the whole row
+ * (and the cards hovering above it) fits, with room left for the captions.
  */
-let followX = SAND_BOUNDS.x[0];
-function overheadView(out, dt) {
-  const portrait = camera.aspect < 1.1;
-  const [x0, x1] = SAND_BOUNDS.x;
-  const [z0, z1] = SAND_BOUNDS.z;
-  const following = portrait && phase !== "done" && sandRun.finaleAt < 0;
-  const halfW = following ? 2.5 : (x1 - x0) / 2;
-  const halfH = (z1 - z0) / 2;
-  followX += (sandRun.x - followX) * Math.min(dt * 0.9, 1);
-  const cx = following ? THREE.MathUtils.clamp(followX, x0 + halfW, x1 - halfW) : (x0 + x1) / 2;
-  const cz = (z0 + z1) / 2;
+function cardsView(out) {
+  const b = chapters.bounds;
+  const halfW = (b.x[1] - b.x[0]) / 2;
+  const halfH = (b.y[1] - b.y[0]) / 2;
   const tanV = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
-  const reserved = portrait ? 0.36 : 0.3; // bottom of the screen kept for the caption
-  const h = Math.max(halfH / (tanV * (1 - reserved)), halfW / (tanV * camera.aspect)) * 1.04;
-  const shift = reserved * h * tanV; // look a little lower so the drawing sits above the caption
-  out.look.set(cx, 0, cz + shift);
-  out.pos.set(out.look.x, h, out.look.z + h * 0.16);
-  out.up.set(0, 0, -1);
+  const reservedTop = camera.aspect < 1.1 ? 0.14 : 0.1; // progress line
+  const reservedBottom = camera.aspect < 1.1 ? 0.3 : 0.24; // captions
+  const usable = 1 - reservedTop - reservedBottom;
+  const d = Math.max(halfW / (tanV * camera.aspect), halfH / (tanV * usable)) * 1.06;
+  // shift the aim so the row sits between the progress line and the captions
+  const shift = ((reservedBottom - reservedTop) / 2) * 2 * d * tanV;
+  const cy = (b.y[0] + b.y[1]) / 2 - shift;
+  const elev = 0.2; // look slightly down onto the boxes
+  out.look.set(0, cy, b.z);
+  out.pos.set(0, cy + Math.sin(elev) * d, b.z + Math.cos(elev) * d);
   return out;
 }
-const overhead = { pos: new THREE.Vector3(), look: new THREE.Vector3(), up: new THREE.Vector3() };
-
-/* ------------------------------------------------------------------ */
-/* Sand script                                                         */
-/* ------------------------------------------------------------------ */
-const SAND_RATE = isTouch ? 300 : 380; // falling grain-clusters per second
-const SAND_SPEED = reduceMotion ? 2.5 : 1;
-const sandRun = {
-  steps: [], i: 0, stroke: null, d: 0, wait: 0,
-  captionAt: 0, readFor: 0, x: -3.6, z: 1.6, flow: 0, weight: 1, tag: 0, finaleAt: -1, reforming: false,
-};
-
-function prepareStroke(pts) {
-  const cum = [0];
-  for (let k = 1; k < pts.length; k++) {
-    cum.push(cum[k - 1] + Math.hypot(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1]));
-  }
-  return { pts, cum, total: cum[cum.length - 1] };
-}
-function strokeAt(st, d) {
-  const { pts, cum } = st;
-  let k = 1;
-  while (k < cum.length - 1 && cum[k] < d) k++;
-  const u = THREE.MathUtils.clamp((d - cum[k - 1]) / (cum[k] - cum[k - 1] || 1), 0, 1);
-  return [pts[k - 1][0] + (pts[k][0] - pts[k - 1][0]) * u, pts[k - 1][1] + (pts[k][1] - pts[k - 1][1]) * u];
-}
-
-/** Advance the sand script; sets sandRun.flow/x/z/weight for this frame. */
-function runSand(dt, time) {
-  const r = sandRun;
-  r.flow = 0;
-  while (r.i < r.steps.length) {
-    const st = r.steps[r.i];
-    if (st.caption) {
-      showPanel(st.caption);
-      r.captionAt = time;
-      // give people time to read it: ~200 words per minute, at least 3.5 s
-      const words = `${st.caption.title} ${st.caption.body}`.split(/\s+/).length;
-      r.readFor = reduceMotion ? 2.5 : Math.max(3.5, words / 3.3);
-      r.i++;
-    } else if (st.label !== undefined) {
-      sandLabels[st.label].el.classList.add("is-visible");
-      r.i++;
-    } else if (st.read) {
-      if (time - r.captionAt < r.readFor) return;
-      r.i++;
-    } else if (st.wait !== undefined) {
-      r.wait += dt;
-      if (r.wait < st.wait) return;
-      r.wait = 0;
-      r.i++;
-    } else if (st.mound) {
-      [r.x, r.z] = st.mound;
-      r.flow = 0.7;
-      r.weight = 2.4;
-      r.tag = st.tag ?? r.tag;
-      r.wait += dt;
-      if (r.wait < st.time) return;
-      r.wait = 0;
-      r.i++;
-    } else if (st.stroke) {
-      if (!r.stroke) {
-        r.stroke = prepareStroke(st.stroke);
-        r.d = 0;
-      }
-      r.d = Math.min(r.d + st.speed * SAND_SPEED * dt, r.stroke.total);
-      [r.x, r.z] = strokeAt(r.stroke, r.d);
-      r.weight = st.weight;
-      r.tag = st.tag ?? r.tag;
-      r.flow = 1;
-      if (r.d < r.stroke.total) return;
-      r.stroke = null;
-      r.i++;
-    } else if (st.finale) {
-      // Every piece lifts off the table and comes together into the logo.
-      sandLabels.forEach((l) => l.el.classList.remove("is-visible"));
-      sand.startReform(st.finale, st.order);
-      sound.whoosh();
-      r.finaleAt = time;
-      r.reforming = true;
-      r.i++;
-      return;
-    } else if (st.waitFinale) {
-      if (r.reforming) return;
-      r.i++;
-    }
-  }
-  // Script finished.
-  if (phase === "sand") phase = "done";
-}
+const cardsCam = { pos: new THREE.Vector3(), look: new THREE.Vector3() };
 
 /* ------------------------------------------------------------------ */
 /* Frame loop                                                          */
@@ -564,7 +526,6 @@ function tick() {
   let tiltTarget = 0;
   let theta = 0;
   let camEase = 3;
-  let sandRate = 0;
   let pourPan = 0;
 
   // 1) Spotlight switches on over the empty table.
@@ -574,10 +535,9 @@ function tick() {
   }
   const lightsOn = phase !== "idle";
   lightLevel += ((lightsOn ? 1 : 0) - lightLevel) * Math.min(dt * 3.5, 1);
-  const overheadMode = phase === "toSand" || phase === "sand" || phase === "done";
-  const beamLevel = overheadMode ? Math.max(0, 1 - t / 1.2) : 1;
-  spot.intensity = (overheadMode ? 105 : 140) * lightLevel * (lightLevel < 0.95 ? 0.85 + Math.random() * 0.15 : 1);
-  beam.material.uniforms.uOpacity.value = 0.07 * lightLevel * (phase === "toSand" ? beamLevel : overheadMode ? 0 : 1);
+  const cardsMode = phase === "toCards" || phase === "cards";
+  spot.intensity = (cardsMode ? 120 : 140) * lightLevel * (lightLevel < 0.95 ? 0.85 + Math.random() * 0.15 : 1);
+  beam.material.uniforms.uOpacity.value = 0.07 * lightLevel * (cardsMode ? 0.6 : 1);
   dust.material.opacity = 0.6 * lightLevel;
 
   // Default camera: in front of the table with gentle mouse parallax.
@@ -677,77 +637,40 @@ function tick() {
   }
   sound.setPour(stream.rate * 0.55, 0.35);
 
-  // 5) Put the glass aside and rise above the table.
-  if (phase === "toSand" || phase === "sand" || phase === "done") {
-    overheadView(overhead, dt);
-    cam.wantPos.copy(overhead.pos);
-    cam.wantLook.copy(overhead.look);
-    cam.wantUp.copy(overhead.up);
-    camEase = phase === "toSand" ? 1.4 : 2;
+  // 5) Put the glass aside; five boxes slide out of the dark.
+  if (cardsMode) {
+    cardsView(cardsCam);
+    const settleC = Math.min((time - settledAt) / 2, 1);
+    cam.wantPos.copy(cardsCam.pos);
+    cam.wantPos.x += mouse.x * 0.3 * settleC;
+    cam.wantPos.y -= mouse.y * 0.15 * settleC;
+    cam.wantLook.copy(cardsCam.look);
+    camEase = phase === "toCards" ? 1.6 : 2.5;
   }
-  if (phase === "toSand") {
+  if (phase === "toCards") {
     const u = seg(t, 0.2, 1.9);
     const p = easeInOut(u);
     rig.position.lerpVectors(aside.from, ASIDE, p);
     glass.group.rotation.y = p * 0.6;
     speed = u > 0 && u < 1 ? Math.sin(u * Math.PI) * 0.55 : 0;
-    pourPan = 0.4;
+    pourPan = -0.4;
     const s = easeInOut(seg(t, 0.4, 2.6));
-    spotPose.x = THREE.MathUtils.lerp(restX, SAND_SPOT.x, s);
-    spotPose.z = THREE.MathUtils.lerp(Z_END, SAND_SPOT.z, s);
-    spotPose.angle = THREE.MathUtils.lerp(SPOT_ANGLE, SAND_SPOT.angle, s);
+    spotPose.x = THREE.MathUtils.lerp(restX, CARDS_SPOT.x, s);
+    spotPose.z = THREE.MathUtils.lerp(Z_END, CARDS_SPOT.z, s);
+    spotPose.angle = THREE.MathUtils.lerp(SPOT_ANGLE, CARDS_SPOT.angle, s);
     applySpot();
-    if (u >= 1 && t > 3.2) {
-      phase = "sand";
+    beam.scale.set(Math.tan(spot.angle) / Math.tan(SPOT_ANGLE), 1, Math.tan(spot.angle) / Math.tan(SPOT_ANGLE));
+    if (t > 1.4 && chapters.mode === "hidden") chapters.start();
+    if (chapters.mode === "ready") {
+      phase = "cards";
       phaseStart = time;
-      sandRun.steps = sandStory.steps;
-      followX = SAND_BOUNDS.x[0];
-      sandRun.i = 0;
-      sandRun.wait = 0;
+      settledAt = time;
+      updateProgress();
+      progressEl.classList.add("is-visible");
     }
   }
-
-  // 6) Sand art: pour the life graph, phase by phase, then bring the pieces together.
-  if (phase === "sand") {
-    runSand(dt, time);
-    sandRate = sandRun.flow;
-    sand.setPour(sandRun.x, sandRun.z, SAND_RATE * sandRun.flow, sandRun.weight, sandRun.tag);
-    if (sandRun.reforming) {
-      // the rush of sand in the air swells and settles
-      const ft = time - sandRun.finaleAt;
-      sandRate = 0.12 + 0.5 * Math.sin(Math.min(ft / 5, 1) * Math.PI);
-    }
-  } else {
-    sand.setPour(0, 0, 0);
-  }
-  const landed = sand.update(dt);
-  const reforming = sand.updateReform(dt);
-  if (sandRun.reforming && !reforming) sandRun.reforming = false;
-  if (landed || reforming) {
-    // Big textures are expensive to re-upload; phones refresh the sand every other frame.
-    if (!isTouch || frameNo % 2 === 0) sand.flush();
-  } else if (phase === "done") sand.flush();
-  sound.setSand(phase === "sand" ? sandRate : 0);
-
-  // Labels follow their spot on the table.
-  if (overheadMode) {
-    for (const l of sandLabels) {
-      tmp.copy(l.anchor).project(camera);
-      const sx = ((tmp.x + 1) / 2) * window.innerWidth;
-      const sy = ((1 - tmp.y) / 2) * window.innerHeight;
-      l.el.style.transform = l.pointer ? `translate(${sx}px, ${sy}px)` : `translate(${sx}px, ${sy}px) translate(-50%, -50%)`;
-      if (l.pointer) {
-        // Flip a callout to the other side of its dot if its text would run off-screen.
-        const [dx, dy] = l.offset;
-        l.textW = l.textW || l.el.querySelector(".callout__text").offsetWidth;
-        const off = dx > 0 ? sx + dx + l.textW + 12 > window.innerWidth : sx + dx - l.textW - 12 < 0;
-        if (off !== l.flipped) {
-          l.flipped = off;
-          setCalloutSide(l.el, off ? -dx : dx, dy);
-        }
-      }
-    }
-  }
+  const boxSlide = chapters.update(dt, time, camera);
+  if (boxSlide > 0) speed = Math.max(speed, boxSlide);
 
   // Water + glass spring dynamics.
   slosh.vel += (-55 * (slosh.tilt - tiltTarget) - 3.0 * slosh.vel) * dt;
@@ -762,8 +685,8 @@ function tick() {
   glass.update(-Math.sin(ry) * slosh.tilt, Math.cos(ry) * slosh.tilt + level, time, slosh.ripple, fill);
 
   // Sound follows the glass on its slide: louder and brighter as it approaches.
-  const proximity = phase === "toSand" ? 0.6 : THREE.MathUtils.clamp((rig.position.z - Z_FAR) / (Z_END - Z_FAR), 0, 1);
-  sound.updateSlide(speed, proximity * proximity, phase === "toSand" ? pourPan : (rig.position.x / 6) * proximity);
+  const proximity = cardsMode ? 0.6 : THREE.MathUtils.clamp((rig.position.z - Z_FAR) / (Z_END - Z_FAR), 0, 1);
+  sound.updateSlide(speed, proximity * proximity, cardsMode ? pourPan : (rig.position.x / 6) * proximity);
 
   // Ease the camera toward where it wants to be.
   if (phase !== "sliding") {
@@ -827,11 +750,17 @@ requestAnimationFrame(tick);
 // Dev helper: open with ?debug to poke at the scene from the console.
 if (import.meta.env.DEV || new URLSearchParams(location.search).has("debug")) {
   window.__portfolio = {
-    scene, camera, renderer, glass, rig, spot, beam, messages, restPos, sand, sandRun,
+    scene, camera, renderer, glass, rig, spot, beam, messages, restPos, chapters,
     setPhase: (p) => { phase = p; phaseStart = debugTime ?? clock.getElapsedTime(); },
     getPhase: () => phase,
     setTime: (t) => (debugTime = t),
     setSkipRender: (v) => (skipRender = v),
     now: () => prevTime,
+    cardOnScreen: (i) => {
+      const v = chapters.cardPosition(i);
+      v.y += 0.5; // the part sticking out of the box
+      v.project(camera);
+      return { x: ((v.x + 1) / 2) * window.innerWidth, y: ((1 - v.y) / 2) * window.innerHeight };
+    },
   };
 }

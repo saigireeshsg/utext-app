@@ -14,8 +14,6 @@
   </head>
   <body>
     <canvas id="scene" aria-hidden="true"></canvas>
-    <!-- Stage names around the sand circle (positioned from the 3D scene) -->
-    <div id="labels" class="labels" aria-hidden="true"></div>
 
     <!-- Entry gate: browsers only allow sound after a user gesture -->
     <div id="gate" class="gate">
@@ -47,7 +45,35 @@
       </p>
     </section>
 
-    <!-- Caption for the sand art -->
+    <!-- Know about me: progress across the five boxes -->
+    <div id="progress" class="progress" aria-live="polite">
+      <div class="progress__dots" aria-hidden="true">
+        <span class="progress__dot"></span><span class="progress__dot"></span><span class="progress__dot"></span><span class="progress__dot"></span><span class="progress__dot"></span>
+      </div>
+      <p class="progress__text">Pull a card out of a box to read that chapter</p>
+    </div>
+    <!-- Keyboard / screen-reader access to the cards -->
+    <nav id="chapter-nav" class="sr-only" aria-label="Chapters"></nav>
+
+    <!-- A pulled card, readable -->
+    <div id="chapter" class="chapter" role="dialog" aria-modal="true" aria-labelledby="chapter-title" hidden>
+      <article class="chapter__card">
+        <button class="chapter__close" type="button" aria-label="Close chapter">✕</button>
+        <div class="chapter__head">
+          <p class="chapter__num"></p>
+          <p class="chapter__kicker"></p>
+        </div>
+        <h2 id="chapter-title" class="chapter__title"></h2>
+        <p class="chapter__body"></p>
+        <ul class="chapter__chips" hidden></ul>
+        <p class="chapter__note" hidden></p>
+        <div class="chapter__actions">
+          <button class="chapter__next" type="button">Next chapter</button>
+        </div>
+      </article>
+    </div>
+
+    <!-- Closing lines -->
     <section id="panel" class="panel" aria-live="polite">
       <p class="mono panel__kicker"></p>
       <h2 class="panel__title"></h2>

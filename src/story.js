@@ -1,5 +1,6 @@
-// Everything the sand art says lives here, so it can be edited without touching the scene.
-// The drawing itself (where each phase is poured) is laid out in sandStory.js.
+// Everything the "Know about me" section says lives here, so it can be edited
+// without touching the scene. Each entry in `phases` is one box / one card;
+// in the finale, card 01 becomes the left bar of the logo and 05 the right.
 
 export const story = {
   phases: [
@@ -12,8 +13,9 @@ export const story = {
     {
       label: "Bits & pieces",
       kicker: "// 02 · bits and pieces",
-      title: "Then the graph went down",
+      title: "Then it all went sideways",
       body: "College didn't go the way I expected. I tried to do everything at once: psychology, coding, machine learning, stocks. I collected bits and pieces of everything and mastered none of it. Being a jack of all trades hurt more than I let on.",
+      chips: ["Psychology", "Coding", "ML", "Stocks"],
     },
     {
       label: "EdTech",
@@ -32,31 +34,18 @@ export const story = {
       kicker: "// 05 · zero to one",
       title: "Founder and founding lead",
       body: "Exploring ventures with SIYA and co-leading Unlearn. I built a community of 8,000+ teachers and principals, personally piloted heysiya.ai in 25+ schools, and got it to revenue within the first year.",
+      note: "One more thing: I'm the first in the family to own a car. A Polo. My mom proudly brings it up at every family function.",
     },
   ],
 
-  // Small labels on the scattered fragments in phase 02.
-  bits: ["Psychology", "Coding", "ML", "Stocks"],
-
-  // Small label on the loop in phase 03.
-  trip: "Mom's India trip",
-
-  // A milestone poured as a small mound at the end of the line.
-  polo: {
-    label: "First car: a Polo",
-    kicker: "// one more thing",
-    title: "First in the family to own a car",
-    body: "A Polo. My mom proudly brings it up at every family function.",
-  },
-
-  // While every phase's sand lifts off the table and comes together (starting from SIYA).
+  // Shown once every card is out, as the cards line up (starting from 05, SIYA).
   together: {
     kicker: "// bringing it back together",
     title: "SIYA needed every piece at once",
     body: "Founding SIYA and co-leading Unlearn pulled everything back in: the teaching, the psychology, the code, the product sense, the communities. Nothing I had tried was wasted.",
   },
 
-  // Once the pieces have formed the Wispr Flow logo.
+  // Once the cards have formed the Wispr Flow logo.
   finale: {
     kicker: "// finding the rhythm",
     title: "It was never about doing everything",
